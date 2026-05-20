@@ -1,0 +1,36 @@
+name = "maipal-api"
+main = "worker/index.ts"
+compatibility_date = "2025-05-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Static assets — served from the Vite build output. Any request that doesn't
+# match a Worker route falls through to a file in dist/ (with SPA fallback to
+# index.html). This lets the web build live at the same origin as /api.
+[assets]
+directory = "./dist"
+not_found_handling = "single-page-application"
+binding = "ASSETS"
+
+# D1 database. The id below is a placeholder — run:
+#   npx wrangler d1 create maipal-db
+# then paste the printed `database_id` here.
+[[d1_databases]]
+binding = "DB"
+database_name = "maipal-db"
+database_id = "PLACEHOLDER_RUN_WRANGLER_D1_CREATE"
+migrations_dir = "migrations"
+
+[observability]
+enabled = true
+
+# When you want to add an LLM proxy, uncomment one of these and read the key in
+# the worker:
+# [vars]
+# CHAT_MODEL = "claude-haiku-4-5-20251001"
+#
+# Or use a Workers AI binding:
+# [ai]
+# binding = "AI"
+
+[env.production]
+# Customize for prod — separate D1 db, custom domain, etc.

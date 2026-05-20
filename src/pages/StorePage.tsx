@@ -1,44 +1,27 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ExternalLink, MapPin, ShoppingCart, Star } from 'lucide-react';
 import { ShanShuiBackground } from '../components/ShanShuiBackground';
 import { ShanShuiHeader } from '../components/ShanShuiHeader';
 import { PointsPill } from '../components/PointsPill';
 import { useApp } from '../contexts/AppContext';
+import { api, type Clinic, type Product } from '../lib/api';
 
-type Product = {
-  id: string;
-  name: string;
-  desc: string;
-  price: number;
-  image: string;
-  source: string;
-  cat: 'tea' | 'soup' | 'paste';
-};
-
-type Clinic = {
-  id: string;
-  name: string;
-  loc: string;
-  specs: string[];
-  rating: number;
-  dist: string;
-  image: string;
-};
-
-const PRODUCTS: Product[] = [
-  { id: 't1', name: '枸杞红枣茶', desc: '补血补气，安神养心', price: 68, image: '/assets/product-chicken-soup.png', source: 'HKTVmall', cat: 'tea' },
-  { id: 't2', name: '菊花决明子茶', desc: '清肝热，护眼明目', price: 58, image: '/assets/product-mushroom.png', source: 'HKTVmall', cat: 'tea' },
-  { id: 's1', name: '虫草党参益气鸡汤', desc: '益气健脾，提升免疫力', price: 188, image: '/assets/product-chicken-soup.png', source: '余仁生', cat: 'soup' },
-  { id: 's2', name: '花胶响螺元贝猪腱汤', desc: '滋阴养颜，补气养血', price: 268, image: '/assets/product-soup-pork.png', source: '余仁生', cat: 'soup' },
-  { id: 's4', name: '药膳菌菇汤包', desc: '鲜美菌菇，温中补脾', price: 88, image: '/assets/product-mushroom.png', source: 'HKTVmall', cat: 'soup' },
-  { id: 'p3', name: '极品阿胶', desc: '滋阴补血，润燥养颜', price: 980, image: '/assets/product-ejiao.png', source: 'HKTVmall', cat: 'paste' },
+// Fallback data used if the API isn't reachable yet (e.g. before
+// `wrangler d1 execute --file=./migrations/0002_seed.sql` has been run).
+const FALLBACK_PRODUCTS: Product[] = [
+  { id: 't1', name: '枸杞红枣茶', description: '补血补气，安神养心', price_hkd: 68, source: 'HKTVmall', category: 'tea', image_url: '/assets/product-chicken-soup.png' },
+  { id: 't2', name: '菊花决明子茶', description: '清肝热，护眼明目', price_hkd: 58, source: 'HKTVmall', category: 'tea', image_url: '/assets/product-mushroom.png' },
+  { id: 's1', name: '虫草党参益气鸡汤', description: '益气健脾，提升免疫力', price_hkd: 188, source: '余仁生', category: 'soup', image_url: '/assets/product-chicken-soup.png' },
+  { id: 's2', name: '花胶响螺元贝猪腱汤', description: '滋阴养颜，补气养血', price_hkd: 268, source: '余仁生', category: 'soup', image_url: '/assets/product-soup-pork.png' },
+  { id: 's4', name: '药膳菌菇汤包', description: '鲜美菌菇，温中补脾', price_hkd: 88, source: 'HKTVmall', category: 'soup', image_url: '/assets/product-mushroom.png' },
+  { id: 'p3', name: '极品阿胶', description: '滋阴补血，润燥养颜', price_hkd: 980, source: 'HKTVmall', category: 'paste', image_url: '/assets/product-ejiao.png' },
 ];
 
-const CLINICS: Clinic[] = [
-  { id: 'c1', name: '香港理工大学医疗保健处', loc: '九龙红磡 香港理工大学 A001室', specs: ['全科医疗', '中医咨询', '学生职员保健'], rating: 4.9, dist: '0.1km', image: '/assets/clinic-polyu.png' },
-  { id: 'c2', name: '香港浸会大学尖沙咀中医药诊所', loc: '九龙尖沙咀堪富利士道12号', specs: ['针灸理疗', '内科调理', '骨伤推拿'], rating: 4.8, dist: '1.2km', image: '/assets/clinic-hkbu-lsc.png' },
-  { id: 'c3', name: '雷生春堂-浸会大学中医药学院', loc: '九龙旺角荔枝角道119号', specs: ['中医全科', '名医会诊', '膏方定制'], rating: 4.9, dist: '2.5km', image: '/assets/clinic-hkbu-lsc.png' },
-  { id: 'c4', name: '农本方中医诊所', loc: '九龙尖沙咀广东道33号中港城地下', specs: ['中医全科', '针灸推拿', '浓缩中药'], rating: 4.7, dist: '2.1km', image: '/assets/clinic-purapharm.png' },
+const FALLBACK_CLINICS: Clinic[] = [
+  { id: 'c1', name: '香港理工大学医疗保健处', location: '九龙红磡 香港理工大学 A001室', specialties: ['全科医疗', '中医咨询', '学生职员保健'], rating: 4.9, distance: '0.1km', image_url: '/assets/clinic-polyu.png' },
+  { id: 'c2', name: '香港浸会大学尖沙咀中医药诊所', location: '九龙尖沙咀堪富利士道12号', specialties: ['针灸理疗', '内科调理', '骨伤推拿'], rating: 4.8, distance: '1.2km', image_url: '/assets/clinic-hkbu-lsc.png' },
+  { id: 'c3', name: '雷生春堂-浸会大学中医药学院', location: '九龙旺角荔枝角道119号', specialties: ['中医全科', '名医会诊', '膏方定制'], rating: 4.9, distance: '2.5km', image_url: '/assets/clinic-hkbu-lsc.png' },
+  { id: 'c4', name: '农本方中医诊所', location: '九龙尖沙咀广东道33号中港城地下', specialties: ['中医全科', '针灸推拿', '浓缩中药'], rating: 4.7, distance: '2.1km', image_url: '/assets/clinic-purapharm.png' },
 ];
 
 const CATS = [
@@ -52,8 +35,16 @@ export function StorePage() {
   const { points } = useApp();
   const [tab, setTab] = useState<'food' | 'doctor'>('food');
   const [cat, setCat] = useState<(typeof CATS)[number]['id']>('all');
+  const [products, setProducts] = useState<Product[]>(FALLBACK_PRODUCTS);
+  const [clinics, setClinics] = useState<Clinic[]>(FALLBACK_CLINICS);
 
-  const visible = cat === 'all' ? PRODUCTS : PRODUCTS.filter((p) => p.cat === cat);
+  useEffect(() => {
+    api.listProducts().then(setProducts).catch(() => undefined);
+    api.listClinics().then(setClinics).catch(() => undefined);
+  }, []);
+
+  const visible =
+    cat === 'all' ? products : products.filter((p) => p.category === cat);
 
   return (
     <div className="app-frame mp-screen" style={{ position: 'relative' }}>
@@ -181,7 +172,7 @@ export function StorePage() {
                     style={{ aspectRatio: '1/1', background: '#f8f3ee', overflow: 'hidden' }}
                   >
                     <img
-                      src={p.image}
+                      src={p.image_url ?? ''}
                       alt={p.name}
                       style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                     />
@@ -228,11 +219,11 @@ export function StorePage() {
                         flex: 1,
                       }}
                     >
-                      {p.desc}
+                      {p.description}
                     </p>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
                       <span style={{ fontSize: 14, fontWeight: 700, color: '#7b8c76' }}>
-                        HK${p.price}
+                        HK${p.price_hkd}
                       </span>
                       <button
                         style={{
@@ -261,7 +252,7 @@ export function StorePage() {
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {CLINICS.map((c) => (
+              {clinics.map((c) => (
                 <div key={c.id} className="mp-card" style={{ padding: 18, cursor: 'pointer' }}>
                   <div style={{ display: 'flex', gap: 14 }}>
                     <div
@@ -275,7 +266,7 @@ export function StorePage() {
                       }}
                     >
                       <img
-                        src={c.image}
+                        src={c.image_url ?? ''}
                         alt={c.name}
                         style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                       />
@@ -335,16 +326,16 @@ export function StorePage() {
                             lineHeight: 1.3,
                           }}
                         >
-                          {c.loc}
+                          {c.location}
                         </p>
                         <span
                           style={{ fontSize: 12, color: '#6b5d4f', flexShrink: 0 }}
                         >
-                          {c.dist}
+                          {c.distance}
                         </span>
                       </div>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                        {c.specs.map((s, i) => (
+                        {c.specialties.map((s, i) => (
                           <span
                             key={i}
                             style={{

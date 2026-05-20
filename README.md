@@ -15,18 +15,58 @@ greeting font `ChillHuoKai` (寒蝉活楷).
 |---|---|
 | Web UI | React 18 + TypeScript + Vite |
 | Native shell | Capacitor 7 (iOS / Android) |
+| API | Cloudflare Workers + Hono |
+| Database | Cloudflare D1 (SQLite) |
 | Routing | react-router-dom v7 |
 | Icons | lucide-react |
 | Animation | CSS keyframes + `motion` (entry/breath/pulse) |
+| Dev integration | `@cloudflare/vite-plugin` (Miniflare runs the worker alongside Vite) |
 | Plugins wired | `@capacitor/status-bar`, `splash-screen`, `camera`, `keyboard`, `haptics`, `preferences`, `app` |
 
 ## Running the web layer
 
 ```bash
 npm install
-npm run dev      # http://localhost:5173
-npm run build    # static bundle into dist/
+npm run dev      # http://localhost:5173 — Vite + Worker (Miniflare) in one process
+npm run build    # static bundle to dist/client, worker bundle to dist/maipal_api
 ```
+
+The first time you start `npm run dev`, apply the D1 migrations and seed the
+catalog so `/api/products` and `/api/clinics` aren't empty:
+
+```bash
+npm run db:apply:local    # creates the tables in .wrangler/state/v3/d1/
+npm run db:seed:local     # populates products + clinics
+```
+
+## Deploying the API + web bundle to Cloudflare
+
+The web bundle is served by the Worker via the Static Assets binding, so one
+`wrangler deploy` ships both — the native app, the web app, and the API all
+hit the same URL.
+
+```bash
+# one-time: provision the D1 database
+npx wrangler d1 create maipal-db
+# → paste the printed database_id into wrangler.toml
+
+npm run db:apply:remote   # create tables in the remote D1
+npm run db:seed:remote    # seed catalog
+
+npm run deploy            # vite build → wrangler deploy
+```
+
+After `wrangler deploy` prints the live URL (e.g.
+`https://maipal-api.<your>.workers.dev`), tell the React + Capacitor build to
+call it by setting `VITE_API_BASE` at build time:
+
+```bash
+VITE_API_BASE="https://maipal-api.<your>.workers.dev" npm run build
+npx cap sync
+```
+
+For a custom domain, add a `[[routes]]` section to `wrangler.toml` and rerun
+`npm run deploy`.
 
 ## Running native (iOS / Android)
 
@@ -72,30 +112,26 @@ Permission modals mimic native iOS dialogs; in the future they'll back onto
 src/
 ├── main.tsx                  router + StrictMode mount
 ├── App.tsx                   route table + status-bar setup
+├── lib/api.ts                typed fetch client + device-id helper
 ├── contexts/AppContext.tsx   user, messages, plan, points, modal orchestration
 ├── layouts/MainLayout.tsx    the 91px bottom tab bar with the sliding sage pill
-├── pages/
-│   ├── SplashScreen.tsx      gradient + 脉 glyph
-│   ├── UserInfoPage.tsx      onboarding form
-│   ├── ChatPage.tsx          floating bubbles over the doctor mascot
-│   ├── SummaryPage.tsx       weekly calendar, report card, daily tasks
-│   └── StorePage.tsx         药膳房 grid + 看医生 clinic list
-├── components/
-│   ├── ShanShuiBackground.tsx
-│   ├── ShanShuiHeader.tsx
-│   ├── ShiqingButton.tsx
-│   ├── PointsPill.tsx
-│   ├── SettingsTile.tsx
-│   ├── QuickChip.tsx
-│   └── modals/               PermissionModal, FaceObservationModal,
-│                             VoiceListeningModal, ConfirmModal, ModalHost
-└── styles/
-    ├── tokens.css            CSS vars (matches maipal-design-system 1:1)
-    └── app.css               base styles + animations + utility classes
+├── pages/                    SplashScreen, UserInfoPage, ChatPage, SummaryPage, StorePage
+├── components/               ShanShuiBackground/Header, ShiqingButton, PointsPill,
+│                             SettingsTile, QuickChip, modals/*
+└── styles/                   tokens.css + app.css (mirror maipal-design-system)
 
-public/
-├── fonts/                    ChillHuoKai Regular / ConRegular / ConBold (.otf)
-└── assets/                   bg-shanshui.png, doctor-maipal.png, products, clinics
+worker/
+├── index.ts                  Hono routes — /api/users, /api/users/:id/messages,
+│                             /api/users/:id/plan, /api/users/:id/reports, /api/products, ...
+├── db.ts                     D1 query helpers (typed)
+├── types.ts                  shared User / Message / Report / Plan / Product / Clinic
+└── tsconfig.json             worker-flavored TS config (workers-types, no DOM)
+
+migrations/0001_init.sql      schema
+seed.sql                      catalog seed (products + clinics)
+wrangler.toml                 Worker name, D1 binding, static-assets binding
+
+public/                       fonts (ChillHuoKai .otf) + product/clinic/background PNGs
 ```
 
 ## Brand guardrails (do not break)

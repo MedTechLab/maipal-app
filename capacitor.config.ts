@@ -12,6 +12,9 @@ const config: CapacitorConfig = {
   android: {
     backgroundColor: '#FAF5F0',
     allowMixedContent: false,
+    // 'https' makes the WebView serve from https://localhost so cookies and
+    // service workers behave the same as iOS, and the same CORS allowlist works.
+    androidScheme: 'https',
   },
   plugins: {
     SplashScreen: {
