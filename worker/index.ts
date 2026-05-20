@@ -24,7 +24,9 @@ app.use(
   '/api/*',
   cors({
     origin: (origin) => {
+      // Native shells / curl / same-origin: no Origin header. Allow.
       if (!origin) return '*';
+      // Local Vite dev.
       if (
         origin === 'http://localhost:5173' ||
         origin === 'capacitor://localhost' ||
@@ -32,8 +34,10 @@ app.use(
         origin === 'http://localhost'
       )
         return origin;
-      // Same-origin browser fetches from the deployed site
+      // Cloudflare-managed subdomains (workers.dev preview, pages.dev preview).
       if (origin.endsWith('.workers.dev') || origin.endsWith('.pages.dev')) return origin;
+      // Production custom domains.
+      if (origin === 'https://maipal.org' || origin.endsWith('.maipal.org')) return origin;
       return null;
     },
     allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],

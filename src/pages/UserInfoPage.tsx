@@ -10,6 +10,65 @@ const CONCERNS = [
   { id: 'emotion', label: '情绪管理', icon: '🧘' },
 ];
 
+// Module-level so React keeps a stable component identity across UserInfoPage
+// re-renders. Defining this inside the parent caused every keystroke to
+// remount the <input>, costing focus and dropping all but the first letter.
+type TextFieldProps = {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+  hasError?: boolean;
+  suffix?: string;
+  inputMode?: 'text' | 'numeric' | 'decimal';
+};
+
+function TextField({
+  value,
+  onChange,
+  placeholder,
+  hasError = false,
+  suffix,
+  inputMode = 'text',
+}: TextFieldProps) {
+  return (
+    <div style={{ position: 'relative' }}>
+      <input
+        type="text"
+        inputMode={inputMode}
+        value={value}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+        style={{
+          width: '100%',
+          background: 'rgba(255,255,255,0.97)',
+          padding: suffix ? '14px 36px 14px 16px' : '14px 16px',
+          borderRadius: 16,
+          fontSize: 16,
+          color: '#2a2a2a',
+          outline: 'none',
+          border: `1.18px solid ${hasError ? '#d4183d' : 'rgba(111,184,153,0.15)'}`,
+          boxShadow: '0 4px 6px rgba(0,0,0,0.05)',
+          fontFamily: 'var(--font-sans)',
+        }}
+      />
+      {suffix && (
+        <span
+          style={{
+            position: 'absolute',
+            right: 14,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            fontSize: 14,
+            color: '#6b5d4f',
+          }}
+        >
+          {suffix}
+        </span>
+      )}
+    </div>
+  );
+}
+
 export function UserInfoPage() {
   const nav = useNavigate();
   const app = useApp();
@@ -48,60 +107,14 @@ export function UserInfoPage() {
     nav('/app/chat');
   };
 
-  const Input = ({
-    value,
-    onChange,
-    placeholder,
-    errKey,
-    suffix,
-  }: {
-    value: string;
-    onChange: (v: string) => void;
-    placeholder: string;
-    errKey?: 'name' | 'age';
-    suffix?: string;
-  }) => (
-    <div style={{ position: 'relative' }}>
-      <input
-        type="text"
-        inputMode="text"
-        value={value}
-        placeholder={placeholder}
-        onChange={(e) => {
-          onChange(e.target.value);
-          if (errKey) setErr({ ...err, [errKey]: false });
-        }}
-        style={{
-          width: '100%',
-          background: 'rgba(255,255,255,0.97)',
-          padding: suffix ? '14px 36px 14px 16px' : '14px 16px',
-          borderRadius: 16,
-          fontSize: 16,
-          color: '#2a2a2a',
-          outline: 'none',
-          border: `1.18px solid ${
-            errKey && err[errKey] ? '#d4183d' : 'rgba(111,184,153,0.15)'
-          }`,
-          boxShadow: '0 4px 6px rgba(0,0,0,0.05)',
-          fontFamily: 'var(--font-sans)',
-        }}
-      />
-      {suffix && (
-        <span
-          style={{
-            position: 'absolute',
-            right: 14,
-            top: '50%',
-            transform: 'translateY(-50%)',
-            fontSize: 14,
-            color: '#6b5d4f',
-          }}
-        >
-          {suffix}
-        </span>
-      )}
-    </div>
-  );
+  const onChangeName = (v: string) => {
+    setName(v);
+    if (err.name) setErr({ ...err, name: false });
+  };
+  const onChangeAge = (v: string) => {
+    setAge(v);
+    if (err.age) setErr({ ...err, age: false });
+  };
 
   const genderBtn = (g: 'male' | 'female', glyph: string, label: string) => (
     <button
@@ -161,7 +174,12 @@ export function UserInfoPage() {
             >
               昵称 <span style={{ color: '#d4183d' }}>*</span>
             </label>
-            <Input value={name} onChange={setName} placeholder="请输入您的昵称" errKey="name" />
+            <TextField
+              value={name}
+              onChange={onChangeName}
+              placeholder="请输入您的昵称"
+              hasError={err.name}
+            />
             {err.name && (
               <p style={{ margin: '4px 0 0', fontSize: 13, color: '#d4183d' }}>请输入昵称</p>
             )}
@@ -202,7 +220,14 @@ export function UserInfoPage() {
                 >
                   年龄 <span style={{ color: '#d4183d' }}>*</span>
                 </label>
-                <Input value={age} onChange={setAge} placeholder="0" errKey="age" suffix="岁" />
+                <TextField
+                  value={age}
+                  onChange={onChangeAge}
+                  placeholder="0"
+                  hasError={err.age}
+                  suffix="岁"
+                  inputMode="numeric"
+                />
               </div>
               <div>
                 <label
@@ -216,7 +241,13 @@ export function UserInfoPage() {
                 >
                   身高
                 </label>
-                <Input value={height} onChange={setHeight} placeholder="0" suffix="cm" />
+                <TextField
+                  value={height}
+                  onChange={setHeight}
+                  placeholder="0"
+                  suffix="cm"
+                  inputMode="numeric"
+                />
               </div>
               <div>
                 <label
@@ -230,7 +261,13 @@ export function UserInfoPage() {
                 >
                   体重
                 </label>
-                <Input value={weight} onChange={setWeight} placeholder="0" suffix="kg" />
+                <TextField
+                  value={weight}
+                  onChange={setWeight}
+                  placeholder="0"
+                  suffix="kg"
+                  inputMode="numeric"
+                />
               </div>
             </div>
           </div>

@@ -9,6 +9,7 @@
     "build": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p worker/tsconfig.json && vite build",
     "preview": "vite preview --host",
     "deploy": "vite build && wrangler deploy",
+    "deploy:pages": "vite build && wrangler pages deploy ./dist/client --project-name maipal-app --commit-dirty=true",
     "cf:types": "wrangler types",
     "db:apply:local": "wrangler d1 migrations apply maipal-db --local",
     "db:apply:remote": "wrangler d1 migrations apply maipal-db --remote",

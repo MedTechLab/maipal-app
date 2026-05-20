@@ -39,34 +39,75 @@ npm run db:apply:local    # creates the tables in .wrangler/state/v3/d1/
 npm run db:seed:local     # populates products + clinics
 ```
 
-## Deploying the API + web bundle to Cloudflare
+## Deploying to Cloudflare
 
-The web bundle is served by the Worker via the Static Assets binding, so one
-`wrangler deploy` ships both — the native app, the web app, and the API all
-hit the same URL.
+There are three deployment targets, all driven from the same source:
+
+| Target | URL | What it serves | Command |
+|---|---|---|---|
+| **Worker** | `maipal-api.<acct>.workers.dev` / `api.maipal.org` | JSON API (`/api/*`) + bundled SPA via Static Assets | `npm run deploy` |
+| **Pages** | `maipal-app.pages.dev` / e.g. `app.maipal.org` | SPA only — calls the Worker API | `npm run deploy:pages` |
+| **Native** | App Store / Play Store | iOS + Android Capacitor shells calling the Worker API | `cap sync` → `cap open` |
+
+The Worker is the source of truth for the API. Pages and the native shells
+are different clients pointed at it.
+
+### One-time setup
 
 ```bash
-# one-time: provision the D1 database
+# Provision D1 (already done — id is in wrangler.toml).
+# If you ever recreate it:
 npx wrangler d1 create maipal-db
 # → paste the printed database_id into wrangler.toml
 
 npm run db:apply:remote   # create tables in the remote D1
 npm run db:seed:remote    # seed catalog
-
-npm run deploy            # vite build → wrangler deploy
 ```
 
-After `wrangler deploy` prints the live URL (e.g.
-`https://maipal-api.<your>.workers.dev`), tell the React + Capacitor build to
-call it by setting `VITE_API_BASE` at build time:
+### Production API base
+
+`.env.production` sets `VITE_API_BASE=https://api.maipal.org`. Every
+non-dev build — Worker static assets, Pages, or `cap sync` — picks that
+up so the client always calls the same API URL.
+
+If you don't want the env file checked in, delete it and pass it inline:
 
 ```bash
-VITE_API_BASE="https://maipal-api.<your>.workers.dev" npm run build
-npx cap sync
+VITE_API_BASE="https://api.maipal.org" npm run deploy
 ```
 
-For a custom domain, add a `[[routes]]` section to `wrangler.toml` and rerun
-`npm run deploy`.
+### Deploying the Worker (API + SPA at one URL)
+
+```bash
+npm run deploy
+```
+
+Maps to `https://maipal-api.<acct>.workers.dev` and any custom routes
+configured in `wrangler.toml`.
+
+### Deploying to Cloudflare Pages (SPA only)
+
+```bash
+npm run deploy:pages
+```
+
+First time it'll prompt to create the Pages project named `maipal-app`.
+Subsequent runs deploy a new version. Hook a custom domain (e.g.
+`app.maipal.org`) in the Pages dashboard. The `_redirects` file in
+`public/` gives Pages SPA fallback for client-side routes.
+
+### Building the Capacitor native bundle
+
+```bash
+npm run build            # uses .env.production
+npx cap add ios          # one-time
+npx cap add android      # one-time
+npx cap sync
+npx cap open ios
+```
+
+The bundled bundle inside the App Store / Play Store binary calls
+`https://api.maipal.org` directly.
 
 ## Running native (iOS / Android)
 
