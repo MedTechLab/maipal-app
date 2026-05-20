@@ -17,7 +17,7 @@ binding = "ASSETS"
 [[d1_databases]]
 binding = "DB"
 database_name = "maipal-db"
-database_id = "PLACEHOLDER_RUN_WRANGLER_D1_CREATE"
+database_id = "933bb2fb-7158-49b0-b3df-b48fbb292fb9"
 migrations_dir = "migrations"
 
 [observability]
