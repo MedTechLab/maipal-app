@@ -1,0 +1,153 @@
+/* ============================================================
+   MaiPal 脉伴 — Design Tokens
+   Source: maipal-design-system (千里江山图 palette)
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=ZCOOL+XiaoWei&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap');
+
+@font-face {
+  font-family: 'ChillHuoKai';
+  src: url('/fonts/ChillHuoKai_Regular.otf') format('opentype');
+  font-weight: 400;
+  font-stretch: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'ChillHuoKai';
+  src: url('/fonts/ChillHuoKai_ConRegular.otf') format('opentype');
+  font-weight: 400;
+  font-stretch: condensed;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'ChillHuoKai';
+  src: url('/fonts/ChillHuoKai_ConBold.otf') format('opentype');
+  font-weight: 700;
+  font-stretch: condensed;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  /* Sage / mineral green family */
+  --shiqing: #7b8c76;
+  --shiqing-deep: #4a7c8e;
+  --shilv: #6fb899;
+  --shilv-light: #8cc9a8;
+  --shilv-soft: rgba(111, 184, 153, 0.15);
+
+  /* Mineral gold-ochre */
+  --gold: #d4a574;
+  --gold-bright: #e8b563;
+  --xuanzhi: #e8c17c;
+  --xuanzhi-warm: #d9a96a;
+  --xuanzhi-dark: #c99855;
+
+  /* Ink & paper */
+  --ink: #2a2a2a;
+  --ink-soft: #5a4a3a;
+  --ink-muted: #6b5d4f;
+  --paper: #f8f3ee;
+  --paper-veil: #f0e6dc;
+  --paper-cream: #faf5f0;
+  --muted-tan: #e8dcc8;
+
+  /* Semantic */
+  --bg: var(--xuanzhi);
+  --bg-paper: var(--paper-cream);
+  --fg-1: var(--ink);
+  --fg-2: var(--ink-soft);
+  --fg-3: var(--ink-muted);
+  --fg-on-primary: #ffffff;
+
+  --surface: rgba(255, 255, 255, 0.95);
+  --surface-translucent: rgba(255, 255, 255, 0.78);
+  --surface-strong: #ffffff;
+  --surface-veil: var(--paper-veil);
+
+  --hairline: rgba(111, 184, 153, 0.15);
+  --hairline-ink: rgba(0, 0, 0, 0.1);
+
+  --primary: var(--shiqing);
+  --primary-foreground: #ffffff;
+  --secondary: var(--shilv);
+  --accent-warm: var(--gold);
+  --accent-bright: var(--gold-bright);
+  --destructive: #d4183d;
+  --user-bubble: var(--shiqing);
+  --user-bubble-fg: #ffffff;
+  --ai-bubble: var(--surface-translucent);
+  --ai-bubble-fg: var(--ink);
+  --send-button: #d7c8b0;
+
+  /* Type families */
+  --font-brush: 'ChillHuoKai', 'Ma Shan Zheng', cursive;
+  --font-display: 'ZCOOL XiaoWei', 'Noto Serif SC', serif;
+  --font-serif: 'Noto Serif SC', serif;
+  --font-sans: 'Noto Sans SC', system-ui, -apple-system, 'PingFang SC', sans-serif;
+
+  /* Type scale */
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 15px;
+  --text-xl: 16px;
+  --text-2xl: 18px;
+  --text-3xl: 20px;
+  --text-4xl: 24px;
+  --text-5xl: 32px;
+  --text-6xl: 48px;
+
+  --leading-tight: 1.2;
+  --leading-snug: 1.4;
+  --leading-body: 1.6;
+  --leading-bubble: 1.857;
+
+  /* Radii */
+  --radius-xs: 10px;
+  --radius-sm: 12px;
+  --radius-md: 16px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+  --radius-pill: 30px;
+  --radius-circle: 999px;
+
+  /* Shadows */
+  --shadow-xs: 0px 2px 4px rgba(0, 0, 0, 0.05);
+  --shadow-sm: 0px 4px 4px rgba(107, 93, 79, 0.05);
+  --shadow: 0px 4px 6px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0px 4px 8px rgba(107, 93, 79, 0.05);
+  --shadow-lg: 0px 4px 10px rgba(123, 140, 118, 0.4);
+  --shadow-xl: 0px 12px 28px rgba(107, 93, 79, 0.25);
+  --shadow-2xl: 0px 16px 40px rgba(0, 0, 0, 0.18);
+  --shadow-h1: drop-shadow(0px 3px 3px rgba(0, 0, 0, 0.12));
+  --shadow-btn: 0px 4px 6px rgba(107, 93, 79, 0.15);
+
+  /* Motion */
+  --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --press-scale: 0.95;
+  --soft-press: 0.98;
+  --duration-fast: 300ms;
+  --duration: 450ms;
+  --duration-slow: 600ms;
+
+  /* Safe areas — Capacitor sets env() for iOS notches */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+
+  /* Protection gradient — fades shan-shui under content */
+  --protect-gradient: linear-gradient(
+    rgba(248, 243, 238, 0) 0%,
+    rgba(248, 243, 238, 0.5) 11.6%,
+    rgba(249, 244, 239, 0.8) 21.6%,
+    rgba(249, 244, 239, 0.97) 34.2%,
+    rgb(250, 245, 240) 79.4%,
+    rgb(250, 245, 240) 100%
+  );
+}
