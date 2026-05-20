@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShanShuiBackground } from '../components/ShanShuiBackground';
-import { useApp, type User } from '../contexts/AppContext';
+import { useApp, type ProfileDraft } from '../contexts/AppContext';
 
 const CONCERNS = [
   { id: 'diet', label: '饮食调理', icon: '🍽️' },
@@ -72,13 +72,17 @@ function TextField({
 export function UserInfoPage() {
   const nav = useNavigate();
   const app = useApp();
-  const [name, setName] = useState('小芳');
-  const [gender, setGender] = useState<'' | 'male' | 'female'>('');
-  const [age, setAge] = useState('52');
-  const [height, setHeight] = useState('');
-  const [weight, setWeight] = useState('');
-  const [concerns, setConcerns] = useState<Set<string>>(new Set(['sleep']));
+  // Prefill the name from the OAuth identity if the provider gave us one.
+  const [name, setName] = useState(app.user?.name ?? '');
+  const [gender, setGender] = useState<'' | 'male' | 'female'>(app.user?.gender ?? '');
+  const [age, setAge] = useState(app.user?.age ? String(app.user.age) : '');
+  const [height, setHeight] = useState(app.user?.height ? String(app.user.height) : '');
+  const [weight, setWeight] = useState(app.user?.weight ? String(app.user.weight) : '');
+  const [concerns, setConcerns] = useState<Set<string>>(
+    new Set(app.user?.concerns?.length ? app.user.concerns : ['sleep']),
+  );
   const [err, setErr] = useState<{ name?: boolean; gender?: boolean; age?: boolean }>({});
+  const [submitting, setSubmitting] = useState(false);
 
   const toggleConcern = (id: string) => {
     const s = new Set(concerns);
@@ -87,7 +91,7 @@ export function UserInfoPage() {
     setConcerns(s);
   };
 
-  const submit = () => {
+  const submit = async () => {
     const e = {
       name: !name.trim(),
       gender: !gender,
@@ -95,7 +99,7 @@ export function UserInfoPage() {
     };
     setErr(e);
     if (Object.values(e).some(Boolean)) return;
-    const u: User = {
+    const draft: ProfileDraft = {
       name: name.trim(),
       gender: gender as 'male' | 'female',
       age: +age,
@@ -103,8 +107,14 @@ export function UserInfoPage() {
       weight: weight ? +weight : undefined,
       concerns: [...concerns],
     };
-    app.setUser(u);
-    nav('/app/chat');
+    setSubmitting(true);
+    try {
+      await app.saveProfile(draft);
+      nav('/app/chat', { replace: true });
+    } catch {
+      // Keep the user on the form so they can retry; the api helper logs.
+      setSubmitting(false);
+    }
   };
 
   const onChangeName = (v: string) => {
@@ -330,10 +340,11 @@ export function UserInfoPage() {
       >
         <button
           onClick={submit}
+          disabled={submitting}
           className="mp-btn-pri mp-btn-block"
-          style={{ height: 56, fontSize: 18 }}
+          style={{ height: 56, fontSize: 18, opacity: submitting ? 0.6 : 1 }}
         >
-          下一步
+          {submitting ? '保存中…' : '下一步'}
         </button>
       </div>
     </div>

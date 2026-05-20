@@ -1,0 +1,9 @@
+# Local Worker secrets — copy to .dev.vars (gitignored) and fill in.
+# For production, use `npx wrangler secret put <NAME>` instead.
+# See README.md → "Authentication" for where to get each value.
+
+SESSION_SECRET=replace-me-with-32-random-bytes
+GOOGLE_CLIENT_ID=
+APPLE_CLIENT_ID=
+MICROSOFT_CLIENT_ID=
+MICROSOFT_TENANT=common

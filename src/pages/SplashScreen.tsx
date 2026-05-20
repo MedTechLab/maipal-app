@@ -1,12 +1,27 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useApp } from '../contexts/AppContext';
 
 export function SplashScreen() {
   const nav = useNavigate();
+  const { isAuthenticated, authLoading, user } = useApp();
+
   useEffect(() => {
-    const t = setTimeout(() => nav('/userinfo'), 2000);
+    // Show the splash for at least 1.2s so it doesn't flash, then route based
+    // on session state. While `authLoading` is true we just wait — the effect
+    // re-fires when it flips false.
+    if (authLoading) return;
+    const t = setTimeout(() => {
+      if (!isAuthenticated) {
+        nav('/login', { replace: true });
+      } else if (!user?.name) {
+        nav('/userinfo', { replace: true });
+      } else {
+        nav('/app/chat', { replace: true });
+      }
+    }, 1200);
     return () => clearTimeout(t);
-  }, [nav]);
+  }, [nav, authLoading, isAuthenticated, user]);
 
   return (
     <div

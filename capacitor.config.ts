@@ -34,6 +34,15 @@ const config: CapacitorConfig = {
       resize: 'native',
       resizeOnFullScreen: true,
     },
+    // Social login provider IDs are baked into the native bundle at build time.
+    // Set these env vars before `npm run build` / `cap sync`. See README.
+    SocialLogin: {
+      providers: {
+        google: true,
+        apple: true,
+        oauth2: true,
+      },
+    },
   },
 };
 

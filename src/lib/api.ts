@@ -9,20 +9,22 @@
 // env value into the bundled JS during `cap sync`.
 
 import type {
+  AuthLoginResponse,
   ChatMessage,
   Clinic,
-  CreateUserBody,
   HealthReport,
   Plan,
   PostMessageBody,
   PostReportBody,
   Product,
+  UpdateUserProfileBody,
   User,
 } from '../../worker/types';
 
-export type { ChatMessage, Clinic, HealthReport, Plan, Product, User };
+export type { AuthLoginResponse, ChatMessage, Clinic, HealthReport, Plan, Product, User };
 
 const BASE: string = (import.meta.env.VITE_API_BASE as string | undefined) ?? '';
+const TOKEN_KEY = 'maipal.session';
 
 class ApiError extends Error {
   constructor(public status: number, public body: unknown, message?: string) {
@@ -30,17 +32,54 @@ class ApiError extends Error {
   }
 }
 
+// ─── Session token storage ───────────────────────────────────
+// Cached in-memory; persisted to @capacitor/preferences so it survives app
+// relaunches on iOS/Android and to localStorage on web (Preferences proxies
+// to localStorage in browsers).
+
+let cachedToken: string | null = null;
+
+async function preferences() {
+  const { Preferences } = await import('@capacitor/preferences');
+  return Preferences;
+}
+
+export async function loadSessionToken(): Promise<string | null> {
+  if (cachedToken !== null) return cachedToken;
+  const Preferences = await preferences();
+  const { value } = await Preferences.get({ key: TOKEN_KEY });
+  cachedToken = value ?? null;
+  return cachedToken;
+}
+
+export async function setSessionToken(token: string | null): Promise<void> {
+  cachedToken = token;
+  const Preferences = await preferences();
+  if (token) {
+    await Preferences.set({ key: TOKEN_KEY, value: token });
+  } else {
+    await Preferences.remove({ key: TOKEN_KEY });
+  }
+}
+
+// ─── Fetch helpers ───────────────────────────────────────────
+
 async function req<T>(
   path: string,
-  init: RequestInit & { json?: unknown } = {},
+  init: RequestInit & { json?: unknown; auth?: boolean } = {},
 ): Promise<T> {
-  const { json, headers, ...rest } = init;
+  const { json, headers, auth = true, ...rest } = init;
+  const finalHeaders: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...((headers as Record<string, string> | undefined) ?? {}),
+  };
+  if (auth) {
+    const token = await loadSessionToken();
+    if (token) finalHeaders.Authorization = `Bearer ${token}`;
+  }
   const res = await fetch(`${BASE}${path}`, {
     ...rest,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(headers ?? {}),
-    },
+    headers: finalHeaders,
     body: json !== undefined ? JSON.stringify(json) : (init.body as BodyInit | undefined),
   });
   const text = await res.text();
@@ -49,45 +88,57 @@ async function req<T>(
   return body as T;
 }
 
-export const api = {
-  health: () => req<{ ok: boolean; ts: number }>('/api/health'),
+// ─── Public API ──────────────────────────────────────────────
 
-  // Users
-  upsertUser: (body: CreateUserBody) =>
-    req<User>('/api/users', { method: 'POST', json: body }),
-  getUser: (id: string) => req<User>(`/api/users/${id}`),
+export const api = {
+  health: () => req<{ ok: boolean; ts: number }>('/api/health', { auth: false }),
+
+  // Auth
+  loginGoogle: (idToken: string) =>
+    req<AuthLoginResponse>('/api/auth/google', {
+      method: 'POST',
+      json: { idToken },
+      auth: false,
+    }),
+  loginApple: (idToken: string, name?: string) =>
+    req<AuthLoginResponse>('/api/auth/apple', {
+      method: 'POST',
+      json: { idToken, name },
+      auth: false,
+    }),
+  loginMicrosoft: (idToken: string) =>
+    req<AuthLoginResponse>('/api/auth/microsoft', {
+      method: 'POST',
+      json: { idToken },
+      auth: false,
+    }),
+  me: () => req<User>('/api/auth/me'),
+
+  // Profile
+  updateProfile: (body: UpdateUserProfileBody) =>
+    req<User>('/api/me/profile', { method: 'POST', json: body }),
 
   // Chat
-  listMessages: (userId: string) =>
-    req<ChatMessage[]>(`/api/users/${userId}/messages`),
-  postMessage: (userId: string, body: PostMessageBody) =>
-    req<ChatMessage>(`/api/users/${userId}/messages`, {
-      method: 'POST',
-      json: body,
-    }),
+  listMessages: () => req<ChatMessage[]>('/api/me/messages'),
+  postMessage: (body: PostMessageBody) =>
+    req<ChatMessage>('/api/me/messages', { method: 'POST', json: body }),
 
   // Reports
-  latestReport: (userId: string) =>
-    req<HealthReport | null>(`/api/users/${userId}/reports/latest`),
-  postReport: (userId: string, body: PostReportBody) =>
-    req<HealthReport>(`/api/users/${userId}/reports`, {
-      method: 'POST',
-      json: body,
-    }),
+  latestReport: () => req<HealthReport | null>('/api/me/reports/latest'),
+  postReport: (body: PostReportBody) =>
+    req<HealthReport>('/api/me/reports', { method: 'POST', json: body }),
 
   // Plan + tasks
-  getPlan: (userId: string) => req<Plan | null>(`/api/users/${userId}/plan`),
-  createPlan: (userId: string) =>
-    req<Plan>(`/api/users/${userId}/plan`, { method: 'POST' }),
+  getPlan: () => req<Plan | null>('/api/me/plan'),
+  createPlan: () => req<Plan>('/api/me/plan', { method: 'POST' }),
   completeTask: (taskId: string) =>
-    req<{ id: string; completed: boolean }>(
-      `/api/tasks/${taskId}/complete`,
-      { method: 'PATCH' },
-    ),
+    req<{ id: string; completed: boolean }>(`/api/tasks/${taskId}/complete`, {
+      method: 'PATCH',
+    }),
 
   // Points
-  addPoints: (userId: string, delta: number, reason: string, task_id?: string) =>
-    req<{ points: number }>(`/api/users/${userId}/points`, {
+  addPoints: (delta: number, reason: string, task_id?: string) =>
+    req<{ points: number }>('/api/me/points', {
       method: 'POST',
       json: { delta, reason, task_id },
     }),
@@ -96,23 +147,9 @@ export const api = {
   listProducts: (category?: string) =>
     req<Product[]>(
       `/api/products${category && category !== 'all' ? `?category=${category}` : ''}`,
+      { auth: false },
     ),
-  listClinics: () => req<Clinic[]>('/api/clinics'),
+  listClinics: () => req<Clinic[]>('/api/clinics', { auth: false }),
 };
 
 export { ApiError };
-
-/**
- * Stable device ID. Uses @capacitor/preferences on native (so it survives app
- * relaunches) and localStorage in the browser. Created lazily on first call.
- */
-export async function getDeviceId(): Promise<string> {
-  // Lazy import to avoid pulling Preferences into the web bundle eagerly.
-  const { Preferences } = await import('@capacitor/preferences');
-  const KEY = 'maipal.deviceId';
-  const cur = await Preferences.get({ key: KEY });
-  if (cur.value) return cur.value;
-  const id = crypto.randomUUID();
-  await Preferences.set({ key: KEY, value: id });
-  return id;
-}

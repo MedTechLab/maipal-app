@@ -2,12 +2,19 @@
 // The client imports from `@shared/types` (see vite alias).
 
 export type Gender = 'male' | 'female';
+export type AuthProvider = 'google' | 'apple' | 'microsoft';
 
 export interface User {
   id: string;
-  name: string;
-  gender: Gender;
-  age: number;
+  auth_provider: AuthProvider | null;
+  email: string | null;
+  // `name`, `gender`, `age` are nullable in storage: the row is created at
+  // sign-in (before /userinfo runs) and the profile fields are filled in
+  // immediately afterwards. The client treats a row with null `name` as
+  // "needs onboarding".
+  name: string | null;
+  gender: Gender | null;
+  age: number | null;
   height?: number;
   weight?: number;
   concerns: string[];
@@ -71,14 +78,26 @@ export interface Clinic {
   image_url: string | null;
 }
 
-export interface CreateUserBody {
-  id?: string; // device-generated UUID; server will allocate if absent
+export interface UpdateUserProfileBody {
   name: string;
   gender: Gender;
   age: number;
   height?: number;
   weight?: number;
   concerns?: string[];
+}
+
+export interface AuthLoginBody {
+  idToken: string;
+  // Apple only sends the user's name in the *initial* authorization response,
+  // not in the ID token. The client forwards it on first sign-in so we can
+  // persist it.
+  name?: string;
+}
+
+export interface AuthLoginResponse {
+  token: string;
+  user: User;
 }
 
 export interface PostMessageBody {

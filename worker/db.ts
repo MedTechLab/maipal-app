@@ -1,4 +1,5 @@
 import type {
+  AuthProvider,
   ChatMessage,
   Clinic,
   HealthReport,
@@ -26,9 +27,12 @@ const parseJsonArray = (s: string | null | undefined): string[] => {
 
 interface UserRow {
   id: string;
-  name: string;
-  gender: 'male' | 'female';
-  age: number;
+  auth_provider: AuthProvider | null;
+  auth_subject: string | null;
+  email: string | null;
+  name: string | null;
+  gender: 'male' | 'female' | null;
+  age: number | null;
   height: number | null;
   weight: number | null;
   concerns: string;
@@ -39,6 +43,8 @@ interface UserRow {
 
 const rowToUser = (r: UserRow): User => ({
   id: r.id,
+  auth_provider: r.auth_provider,
+  email: r.email,
   name: r.name,
   gender: r.gender,
   age: r.age,
@@ -50,10 +56,54 @@ const rowToUser = (r: UserRow): User => ({
   updated_at: r.updated_at,
 });
 
-export async function upsertUser(
+/** Find or create the user row for a verified OAuth identity. */
+export async function upsertAuthUser(
   db: DB,
-  u: {
-    id: string;
+  identity: {
+    provider: AuthProvider;
+    subject: string;
+    email: string | null;
+    name: string | null;
+  },
+): Promise<User> {
+  const existing = await db
+    .prepare(
+      'SELECT * FROM users WHERE auth_provider = ? AND auth_subject = ?',
+    )
+    .bind(identity.provider, identity.subject)
+    .first<UserRow>();
+  if (existing) {
+    // Refresh email/name if the provider gave us better data this time.
+    const ts = now();
+    await db
+      .prepare(
+        `UPDATE users SET
+           email = COALESCE(?, email),
+           name = COALESCE(name, ?),
+           updated_at = ?
+         WHERE id = ?`,
+      )
+      .bind(identity.email, identity.name, ts, existing.id)
+      .run();
+    return (await getUserById(db, existing.id))!;
+  }
+  const id = crypto.randomUUID();
+  const ts = now();
+  await db
+    .prepare(
+      `INSERT INTO users (id, auth_provider, auth_subject, email, name, concerns, points, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, '[]', 0, ?, ?)`,
+    )
+    .bind(id, identity.provider, identity.subject, identity.email, identity.name, ts, ts)
+    .run();
+  return (await getUserById(db, id))!;
+}
+
+/** Fill in the profile fields from /userinfo. */
+export async function updateUserProfile(
+  db: DB,
+  id: string,
+  p: {
     name: string;
     gender: 'male' | 'female';
     age: number;
@@ -65,36 +115,37 @@ export async function upsertUser(
   const ts = now();
   await db
     .prepare(
-      `INSERT INTO users (id, name, gender, age, height, weight, concerns, points, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET
-         name = excluded.name,
-         gender = excluded.gender,
-         age = excluded.age,
-         height = excluded.height,
-         weight = excluded.weight,
-         concerns = excluded.concerns,
-         updated_at = excluded.updated_at`,
+      `UPDATE users SET
+         name = ?,
+         gender = ?,
+         age = ?,
+         height = ?,
+         weight = ?,
+         concerns = ?,
+         updated_at = ?
+       WHERE id = ?`,
     )
     .bind(
-      u.id,
-      u.name,
-      u.gender,
-      u.age,
-      u.height ?? null,
-      u.weight ?? null,
-      JSON.stringify(u.concerns ?? []),
+      p.name,
+      p.gender,
+      p.age,
+      p.height ?? null,
+      p.weight ?? null,
+      JSON.stringify(p.concerns ?? []),
       ts,
-      ts,
+      id,
     )
     .run();
-  return (await getUser(db, u.id))!;
+  return (await getUserById(db, id))!;
 }
 
-export async function getUser(db: DB, id: string): Promise<User | null> {
+export async function getUserById(db: DB, id: string): Promise<User | null> {
   const r = await db.prepare('SELECT * FROM users WHERE id = ?').bind(id).first<UserRow>();
   return r ? rowToUser(r) : null;
 }
+
+// Backwards-compatible alias for older callers.
+export const getUser = getUserById;
 
 // ─── Messages ────────────────────────────────────────────────
 

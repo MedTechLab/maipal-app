@@ -8,17 +8,21 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { api, getDeviceId } from '../lib/api';
+import { api, loadSessionToken, setSessionToken, type User as ServerUser } from '../lib/api';
+import { login as oauthLogin, logout as oauthLogout, type AuthProvider } from '../lib/social-login';
 
-export type User = {
-  id?: string;
+export type Gender = 'male' | 'female';
+
+export type ProfileDraft = {
   name: string;
-  gender: 'male' | 'female';
+  gender: Gender;
   age: number;
   height?: number;
   weight?: number;
   concerns: string[];
 };
+
+export type User = ServerUser;
 
 export type ChatMessage = {
   id: string;
@@ -42,8 +46,14 @@ export type Task = {
 type Permission = null | true | false;
 
 type AppContextValue = {
+  /** null until the session check is done; thereafter the current user or signed-out null. */
   user: User | null;
-  setUser: (u: User) => void;
+  isAuthenticated: boolean;
+  /** true while we're hydrating the session at boot. */
+  authLoading: boolean;
+  signInWith: (provider: AuthProvider) => Promise<User>;
+  signOut: () => Promise<void>;
+  saveProfile: (p: ProfileDraft) => Promise<User>;
 
   cameraPerm: Permission;
   micPerm: Permission;
@@ -88,12 +98,12 @@ const OPENING_MESSAGE: ChatMessage = {
 
 const swallow = (e: unknown) => {
   // Network/API errors are non-fatal — the UI keeps its local state.
-  // We log to the console so the dev still sees them while iterating.
   console.warn('[api]', e);
 };
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [user, setUserState] = useState<User | null>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [cameraPerm, setCameraPerm] = useState<Permission>(null);
   const [micPerm, setMicPerm] = useState<Permission>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([OPENING_MESSAGE]);
@@ -108,97 +118,131 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [recTime, setRecTime] = useState(0);
 
   const onDoneRef = useRef<(() => void) | null>(null);
-  const deviceIdRef = useRef<string | null>(null);
 
-  // Resolve the stable device id once, regardless of whether the user signs up.
+  // Pull the user-scoped data after we have a logged-in user.
+  const hydrateUserData = useCallback(async () => {
+    try {
+      const [msgs, report, plan] = await Promise.all([
+        api.listMessages().catch(() => [] as ChatMessage[] | Awaited<ReturnType<typeof api.listMessages>>),
+        api.latestReport().catch(() => null as Awaited<ReturnType<typeof api.latestReport>>),
+        api.getPlan().catch(() => null as Awaited<ReturnType<typeof api.getPlan>>),
+      ]);
+      if (Array.isArray(msgs) && msgs.length > 0) {
+        setMessages(msgs.map((r) => ({ id: r.id, role: r.role, content: r.content })));
+      }
+      if (report) {
+        setHealthReportState({
+          date: report.date,
+          faceAnalysis: report.face_analysis ?? '',
+          voiceAnalysis: report.voice_analysis ?? '',
+          suggestions: report.suggestions,
+        });
+      }
+      if (plan) {
+        setHasPlan(true);
+        setTasks(plan.tasks.map((t) => ({ id: t.id, text: t.text, completed: t.completed })));
+      }
+    } catch (e) {
+      swallow(e);
+    }
+  }, []);
+
+  // Boot: if we have a stored session, validate it with /api/auth/me.
   useEffect(() => {
     let cancelled = false;
-    getDeviceId()
-      .then((id) => {
-        if (!cancelled) deviceIdRef.current = id;
-      })
-      .catch(swallow);
+    (async () => {
+      const token = await loadSessionToken().catch(() => null);
+      if (!token) {
+        if (!cancelled) setAuthLoading(false);
+        return;
+      }
+      try {
+        const me = await api.me();
+        if (cancelled) return;
+        setUser(me);
+        setPoints(me.points);
+        await hydrateUserData();
+      } catch {
+        // Stale token — clear it so the user sees /login on next render.
+        await setSessionToken(null).catch(() => undefined);
+      } finally {
+        if (!cancelled) setAuthLoading(false);
+      }
+    })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [hydrateUserData]);
 
-  const setUser = useCallback((u: User) => {
-    const id = deviceIdRef.current ?? u.id ?? crypto.randomUUID();
-    deviceIdRef.current = id;
-    const withId = { ...u, id };
-    setUserState(withId);
-    api
-      .upsertUser({
-        id,
-        name: u.name,
-        gender: u.gender,
-        age: u.age,
-        height: u.height,
-        weight: u.weight,
-        concerns: u.concerns,
-      })
-      .then((srv) => {
-        setPoints(srv.points);
-      })
-      .catch(swallow);
-    // Hydrate prior state for returning users.
-    api.listMessages(id).then((rows) => {
-      if (rows.length > 0) {
-        setMessages(rows.map((r) => ({ id: r.id, role: r.role, content: r.content })));
-      }
-    }).catch(swallow);
-    api.latestReport(id).then((r) => {
-      if (r) {
-        setHealthReportState({
-          date: r.date,
-          faceAnalysis: r.face_analysis ?? '',
-          voiceAnalysis: r.voice_analysis ?? '',
-          suggestions: r.suggestions,
-        });
-      }
-    }).catch(swallow);
-    api.getPlan(id).then((p) => {
-      if (p) {
-        setHasPlan(true);
-        setTasks(p.tasks.map((t) => ({ id: t.id, text: t.text, completed: t.completed })));
-      }
-    }).catch(swallow);
+  const signInWith = useCallback(
+    async (provider: AuthProvider): Promise<User> => {
+      const { idToken, name } = await oauthLogin(provider);
+      const resp =
+        provider === 'google'
+          ? await api.loginGoogle(idToken)
+          : provider === 'apple'
+            ? await api.loginApple(idToken, name)
+            : await api.loginMicrosoft(idToken);
+      await setSessionToken(resp.token);
+      setUser(resp.user);
+      setPoints(resp.user.points);
+      hydrateUserData().catch(swallow);
+      return resp.user;
+    },
+    [hydrateUserData],
+  );
+
+  const signOut = useCallback(async () => {
+    if (user?.auth_provider) {
+      await oauthLogout(user.auth_provider).catch(() => undefined);
+    }
+    await setSessionToken(null);
+    setUser(null);
+    setMessages([OPENING_MESSAGE]);
+    setHealthReportState(null);
+    setHasPlan(false);
+    setTasks([]);
+    setPoints(0);
+  }, [user]);
+
+  const saveProfile = useCallback(async (p: ProfileDraft): Promise<User> => {
+    const u = await api.updateProfile({
+      name: p.name,
+      gender: p.gender,
+      age: p.age,
+      height: p.height,
+      weight: p.weight,
+      concerns: p.concerns,
+    });
+    setUser(u);
+    setPoints(u.points);
+    return u;
   }, []);
 
   const addMessage = useCallback(
     (role: 'user' | 'assistant', content: string) => {
       const localId = `m-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
       setMessages((prev) => [...prev, { id: localId, role, content }]);
-      const uid = deviceIdRef.current;
-      if (uid) {
-        api
-          .postMessage(uid, { role, content })
-          .then((m) => {
-            // Reconcile local id with the server-assigned id.
-            setMessages((prev) =>
-              prev.map((x) => (x.id === localId ? { ...x, id: m.id } : x)),
-            );
-          })
-          .catch(swallow);
-      }
+      api
+        .postMessage({ role, content })
+        .then((m) => {
+          setMessages((prev) => prev.map((x) => (x.id === localId ? { ...x, id: m.id } : x)));
+        })
+        .catch(swallow);
     },
     [],
   );
 
   const setHealthReport = useCallback((r: HealthReport) => {
     setHealthReportState(r);
-    const uid = deviceIdRef.current;
-    if (uid) {
-      api
-        .postReport(uid, {
-          date: r.date,
-          face_analysis: r.faceAnalysis,
-          voice_analysis: r.voiceAnalysis,
-          suggestions: r.suggestions,
-        })
-        .catch(swallow);
-    }
+    api
+      .postReport({
+        date: r.date,
+        face_analysis: r.faceAnalysis,
+        voice_analysis: r.voiceAnalysis,
+        suggestions: r.suggestions,
+      })
+      .catch(swallow);
   }, []);
 
   const generatePlan = useCallback(() => {
@@ -211,15 +255,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     ];
     setHasPlan(true);
     setTasks(fallback);
-    const uid = deviceIdRef.current;
-    if (uid) {
-      api
-        .createPlan(uid)
-        .then((p) => {
-          setTasks(p.tasks.map((t) => ({ id: t.id, text: t.text, completed: t.completed })));
-        })
-        .catch(swallow);
-    }
+    api
+      .createPlan()
+      .then((p) => {
+        setTasks(p.tasks.map((t) => ({ id: t.id, text: t.text, completed: t.completed })));
+      })
+      .catch(swallow);
   }, []);
 
   const toggleTask = useCallback((id: string, forceComplete?: boolean) => {
@@ -233,19 +274,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const addPoints = useCallback(
-    (n: number, reason = 'check-in', taskId?: string) => {
-      setPoints((p) => p + n);
-      const uid = deviceIdRef.current;
-      if (uid) {
-        api
-          .addPoints(uid, n, reason, taskId)
-          .then((r) => setPoints(r.points))
-          .catch(swallow);
-      }
-    },
-    [],
-  );
+  const addPoints = useCallback((n: number, reason = 'check-in', taskId?: string) => {
+    setPoints((p) => p + n);
+    api
+      .addPoints(n, reason, taskId)
+      .then((r) => setPoints(r.points))
+      .catch(swallow);
+  }, []);
 
   const runCheckup = useCallback(
     (onDone: () => void) => {
@@ -297,22 +332,64 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<AppContextValue>(
     () => ({
-      user, setUser,
-      cameraPerm, micPerm, setCameraPerm, setMicPerm,
-      messages, addMessage,
-      healthReport, setHealthReport,
-      hasPlan, tasks, generatePlan, toggleTask,
-      points, addPoints,
-      permModal, faceModal, voiceModal, recTime,
-      openPermModal, openFaceModal, openVoiceModal, setRecTime,
-      runCheckup, resolveCheckup, finishCheckup,
+      user,
+      isAuthenticated: !!user,
+      authLoading,
+      signInWith,
+      signOut,
+      saveProfile,
+      cameraPerm,
+      micPerm,
+      setCameraPerm,
+      setMicPerm,
+      messages,
+      addMessage,
+      healthReport,
+      setHealthReport,
+      hasPlan,
+      tasks,
+      generatePlan,
+      toggleTask,
+      points,
+      addPoints,
+      permModal,
+      faceModal,
+      voiceModal,
+      recTime,
+      openPermModal,
+      openFaceModal,
+      openVoiceModal,
+      setRecTime,
+      runCheckup,
+      resolveCheckup,
+      finishCheckup,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
-      user, cameraPerm, micPerm, messages, healthReport, hasPlan, tasks, points,
-      permModal, faceModal, voiceModal, recTime,
-      setUser, addMessage, setHealthReport, generatePlan, toggleTask, addPoints,
-      runCheckup, resolveCheckup, finishCheckup,
+      user,
+      authLoading,
+      cameraPerm,
+      micPerm,
+      messages,
+      healthReport,
+      hasPlan,
+      tasks,
+      points,
+      permModal,
+      faceModal,
+      voiceModal,
+      recTime,
+      signInWith,
+      signOut,
+      saveProfile,
+      addMessage,
+      setHealthReport,
+      generatePlan,
+      toggleTask,
+      addPoints,
+      runCheckup,
+      resolveCheckup,
+      finishCheckup,
     ],
   );
 
