@@ -231,6 +231,7 @@ export const api = {
   listMessages: () => req<ChatMessage[]>('/api/me/messages'),
   postMessage: (body: PostMessageBody) =>
     req<ChatMessage>('/api/me/messages', { method: 'POST', json: body }),
+  clearMessages: () => req<{ ok: boolean }>('/api/me/messages', { method: 'DELETE' }),
   chatStream,
 
   // 望诊 / 闻诊

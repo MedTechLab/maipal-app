@@ -184,6 +184,11 @@ export async function appendMessage(
   return { id, user_id: userId, role, content, created_at };
 }
 
+/** Wipe the user's chat history (used by "start a new consultation"). */
+export async function clearMessages(db: DB, userId: string): Promise<void> {
+  await db.prepare('DELETE FROM chat_messages WHERE user_id = ?').bind(userId).run();
+}
+
 // ─── Reports ─────────────────────────────────────────────────
 
 interface ReportRow {

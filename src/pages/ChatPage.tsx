@@ -1,20 +1,31 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Mic, Send } from 'lucide-react';
+import { Mic, Send, Volume2, VolumeX, RotateCcw } from 'lucide-react';
 import { ShanShuiBackground } from '../components/ShanShuiBackground';
 import { SettingsTile } from '../components/SettingsTile';
 import { ShiqingButton } from '../components/ShiqingButton';
 import { DoctorAvatar } from '../components/DoctorAvatar';
+import { ConfirmModal } from '../components/modals/ConfirmModal';
 import { useApp } from '../contexts/AppContext';
 import { startRecognition, type SttController } from '../lib/stt';
 
 export function ChatPage() {
   const nav = useNavigate();
   const app = useApp();
-  const { user, messages, streaming, sendUserMessage, healthReport } = app;
+  const {
+    user,
+    messages,
+    streaming,
+    sendUserMessage,
+    healthReport,
+    speakingId,
+    toggleSpeak,
+    startNewConsultation,
+  } = app;
 
   const [input, setInput] = useState('');
   const [listening, setListening] = useState(false);
+  const [showReset, setShowReset] = useState(false);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const sttRef = useRef<SttController | null>(null);
 
@@ -69,7 +80,27 @@ export function ChatPage() {
           <p className="mp-h1" style={{ margin: 0 }}>你好，{user?.name || '朋友'}</p>
           <p className="mp-h1" style={{ margin: 0 }}>我是脉大夫</p>
         </div>
-        <SettingsTile />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button
+            onClick={() => setShowReset(true)}
+            aria-label="开始新的问诊"
+            title="开始新的问诊"
+            style={{
+              width: 38,
+              height: 38,
+              borderRadius: 999,
+              border: '1px solid rgba(123,140,118,0.25)',
+              background: 'rgba(255,255,255,0.6)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+            }}
+          >
+            <RotateCcw size={18} color="#7b8c76" />
+          </button>
+          <SettingsTile />
+        </div>
       </div>
 
       <div
@@ -112,17 +143,41 @@ export function ChatPage() {
             const old = idx < messages.length - 3;
             const opacity = old && m.role === 'assistant' ? 0.65 : 1;
             if (m.role === 'assistant' && !m.content) return null;
+            const speaking = speakingId === m.id;
             return (
               <div
                 key={m.id}
                 className="anim-rise"
                 style={{
                   display: 'flex',
-                  justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start',
+                  flexDirection: 'column',
+                  alignItems: m.role === 'user' ? 'flex-end' : 'flex-start',
                   opacity,
                 }}
               >
                 <div className={m.role === 'user' ? 'bubble-user' : 'bubble-ai'}>{m.content}</div>
+                {m.role === 'assistant' && (
+                  <button
+                    onClick={() => toggleSpeak(m.id, m.content)}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      marginTop: 6,
+                      padding: '3px 10px',
+                      fontSize: 11,
+                      fontFamily: 'var(--font-sans)',
+                      color: speaking ? '#fff' : '#7b8c76',
+                      background: speaking ? '#7b8c76' : 'transparent',
+                      border: '1px solid rgba(123,140,118,0.3)',
+                      borderRadius: 12,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {speaking ? <VolumeX size={12} /> : <Volume2 size={12} />}
+                    <span>{speaking ? '停止' : '朗读'}</span>
+                  </button>
+                )}
               </div>
             );
           })}
@@ -219,6 +274,19 @@ export function ChatPage() {
           </button>
         </div>
       </div>
+
+      <ConfirmModal
+        open={showReset}
+        title="开始新的问诊"
+        body="当前对话将被清空，重新从头开始问诊。已生成的报告和调理计划会保留。"
+        primary="开始新问诊"
+        secondary="取消"
+        onPrimary={() => {
+          setShowReset(false);
+          startNewConsultation();
+        }}
+        onSecondary={() => setShowReset(false)}
+      />
     </div>
   );
 }

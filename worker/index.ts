@@ -159,6 +159,11 @@ app.post('/api/me/messages', async (c) => {
   return c.json(m, 201);
 });
 
+app.delete('/api/me/messages', async (c) => {
+  await db.clearMessages(c.env.DB, c.get('userId'));
+  return c.json({ ok: true });
+});
+
 // ─── AI chat (streaming) ─────────────────────────────────────
 // Prepends the persona system prompt and pipes CodeBuddy's SSE through, re-emitting
 // the v5 wire format: `data: {"content":"…"}` … `data: [DONE]`. We don't persist

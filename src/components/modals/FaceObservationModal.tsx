@@ -1,4 +1,12 @@
+import { useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
+import {
+  isWebPlatform,
+  startCameraStream,
+  grabFrame,
+  captureNativePhoto,
+  capturePhoto,
+} from '../../lib/capture';
 
 type State = 'ready' | 'observing' | 'holding' | 'done';
 type Kind = 'face' | 'tongue';
@@ -7,7 +15,7 @@ type Props = {
   open: boolean;
   state: State;
   kind?: Kind;
-  onStart: () => void;
+  onCapture: (image: string) => void;
   onClose: () => void;
 };
 
@@ -20,20 +28,92 @@ const TEXTS: Record<State, { main: string; sub: string }> = {
 
 const PROGRESS: Record<State, number> = { ready: 0, observing: 1, holding: 2, done: 3 };
 
-export function FaceObservationModal({ open, state, kind = 'face', onStart, onClose }: Props) {
+export function FaceObservationModal({ open, state, kind = 'face', onCapture, onClose }: Props) {
+  const isWeb = isWebPlatform();
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const [camError, setCamError] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const stopStream = () => {
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+  };
+
+  // Run the live web viewfinder only while waiting in 'ready'.
+  useEffect(() => {
+    if (!open || !isWeb || state !== 'ready') return;
+    let cancelled = false;
+    setCamError(false);
+    (async () => {
+      try {
+        const stream = await startCameraStream();
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play().catch(() => undefined);
+        }
+      } catch {
+        if (!cancelled) setCamError(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      stopStream();
+    };
+  }, [open, isWeb, state]);
+
   if (!open) return null;
+
   const t = TEXTS[state];
   const isTongue = kind === 'tongue';
   const heading = isTongue ? '我看看您的舌头' : '我先看看您的气色';
   const subheading = isTongue ? '请伸出舌头，正对屏幕' : '请看向屏幕，保持自然表情';
   const frameHint = isTongue ? '请将舌头保持在框内' : '请将面部保持在框内';
-  const btnDisabled = state === 'observing' || state === 'holding';
-  const btnLabel = state === 'ready' ? '开始' : state === 'done' ? '继续聊天' : '正在看…';
+  const btnDisabled = state === 'observing' || state === 'holding' || busy;
+  const btnLabel =
+    state === 'ready' ? (busy ? '拍摄中…' : '拍摄') : state === 'done' ? '继续聊天' : '正在看…';
   const progressIdx = PROGRESS[state];
+  const showVideo = isWeb && !camError && state === 'ready';
+
+  const doCapture = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      if (isWeb && streamRef.current && videoRef.current && !camError) {
+        const img = grabFrame(videoRef.current);
+        stopStream();
+        onCapture(img);
+      } else if (isWeb) {
+        const img = await capturePhoto(); // file-picker fallback
+        onCapture(img);
+      } else {
+        const img = await captureNativePhoto();
+        onCapture(img);
+      }
+    } catch {
+      stopStream();
+      onClose(); // treated as a skip by the parent
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onButtonClick =
+    state === 'ready' ? doCapture : state === 'done' ? onClose : undefined;
+
+  const close = () => {
+    stopStream();
+    onClose();
+  };
 
   return (
     <>
-      <div className="mp-backdrop" onClick={onClose} />
+      <div className="mp-backdrop" onClick={close} />
       <div className="mp-modal-wrap" style={{ maxWidth: 320 }}>
         <div
           style={{
@@ -48,7 +128,7 @@ export function FaceObservationModal({ open, state, kind = 'face', onStart, onCl
           }}
         >
           <button
-            onClick={onClose}
+            onClick={close}
             style={{
               position: 'absolute',
               top: 16,
@@ -89,6 +169,22 @@ export function FaceObservationModal({ open, state, kind = 'face', onStart, onCl
               marginBottom: 16,
             }}
           >
+            {showVideo && (
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                  transform: 'scaleX(-1)',
+                }}
+              />
+            )}
             <div
               style={{
                 position: 'absolute',
@@ -104,7 +200,7 @@ export function FaceObservationModal({ open, state, kind = 'face', onStart, onCl
                   width: 140,
                   height: 170,
                   borderRadius: 28,
-                  border: '2px dashed rgba(215,200,176,0.8)',
+                  border: '2px dashed rgba(255,255,255,0.85)',
                   position: 'relative',
                   boxShadow: '0 0 0 2px rgba(215,200,176,0.2)',
                 }}
@@ -123,9 +219,10 @@ export function FaceObservationModal({ open, state, kind = 'face', onStart, onCl
                 padding: '6px 14px',
                 borderRadius: 999,
                 fontSize: 13,
+                whiteSpace: 'nowrap',
               }}
             >
-              {frameHint}
+              {camError ? '无法打开摄像头，点按下方按钮选择照片' : frameHint}
             </div>
           </div>
 
@@ -155,7 +252,7 @@ export function FaceObservationModal({ open, state, kind = 'face', onStart, onCl
             >
               <img
                 src="/assets/doctor-maipal.png"
-                alt="脉医生"
+                alt="脉大夫"
                 style={{
                   width: '100%',
                   height: '100%',
@@ -173,14 +270,7 @@ export function FaceObservationModal({ open, state, kind = 'face', onStart, onCl
             </div>
           </div>
 
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'center',
-              gap: 8,
-              marginBottom: 18,
-            }}
-          >
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginBottom: 18 }}>
             {[0, 1, 2].map((i) => (
               <div
                 key={i}
@@ -195,7 +285,7 @@ export function FaceObservationModal({ open, state, kind = 'face', onStart, onCl
           </div>
 
           <button
-            onClick={state === 'ready' ? onStart : state === 'done' ? onClose : undefined}
+            onClick={onButtonClick}
             disabled={btnDisabled}
             style={{
               width: '100%',

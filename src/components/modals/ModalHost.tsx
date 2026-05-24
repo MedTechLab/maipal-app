@@ -3,7 +3,7 @@ import { useApp } from '../../contexts/AppContext';
 import { PermissionModal } from './PermissionModal';
 import { FaceObservationModal } from './FaceObservationModal';
 import { VoiceListeningModal } from './VoiceListeningModal';
-import { capturePhoto, requestCameraPermission } from '../../lib/capture';
+import { requestCameraPermission } from '../../lib/capture';
 import { startRecognition, type SttController } from '../../lib/stt';
 
 const MAX_REC_SECONDS = 20;
@@ -65,16 +65,6 @@ export function ModalHost() {
     app.onPermissionResult('mic', granted);
   };
 
-  // ─── Face / tongue capture ────────────────────────────────
-  const onFaceStart = async () => {
-    try {
-      const image = await capturePhoto();
-      app.submitFaceResult(image);
-    } catch {
-      app.cancelFace();
-    }
-  };
-
   // ─── Voice recording ──────────────────────────────────────
   const onVoiceStart = () => {
     submittedRef.current = false;
@@ -119,7 +109,7 @@ export function ModalHost() {
         open={!!app.faceModal}
         state={app.faceModal || 'ready'}
         kind={app.faceKind}
-        onStart={onFaceStart}
+        onCapture={app.submitFaceResult}
         onClose={app.cancelFace}
       />
       <VoiceListeningModal

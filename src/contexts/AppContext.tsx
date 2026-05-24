@@ -71,6 +71,12 @@ type AppContextValue = {
   streaming: boolean;
   sendUserMessage: (text: string) => void;
   avatarState: AvatarState;
+  /** id of the message currently being read aloud, or null. */
+  speakingId: string | null;
+  /** Replay (or stop) TTS for a specific message. */
+  toggleSpeak: (id: string, text: string) => void;
+  /** Clear the conversation and restart from the doctor's opening. */
+  startNewConsultation: () => void;
 
   healthReport: HealthReport | null;
 
@@ -169,6 +175,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   ]);
   const [streaming, setStreaming] = useState(false);
   const [avatarState, setAvatarState] = useState<AvatarState>('standby');
+  const [speakingId, setSpeakingId] = useState<string | null>(null);
   const [healthReport, setHealthReportState] = useState<HealthReport | null>(null);
   const [hasPlan, setHasPlan] = useState(false);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -189,6 +196,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const healthReportRef = useRef<HealthReport | null>(null);
   const pendingRef = useRef<Pending>(null);
   const streamingRef = useRef(false);
+  // Monotonic token so a stale TTS onStart/onEnd can't clobber a newer one.
+  const speakTokenRef = useRef(0);
+  const speakingIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -209,6 +219,46 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const persist = useCallback((role: 'user' | 'assistant', content: string) => {
     api.postMessage({ role, content }).catch(swallow);
   }, []);
+
+  // ─── TTS playback + avatar (shared by autoplay and manual replay) ──
+  const speak = useCallback((id: string, rawText: string) => {
+    const speakable = cleanTextForTTS(rawText);
+    if (!speakable) return;
+    const token = ++speakTokenRef.current;
+    speakingIdRef.current = id;
+    setSpeakingId(id);
+    setAvatarState('speaking');
+    speakText(speakable, {
+      onStart: () => {
+        if (speakTokenRef.current !== token) return;
+        speakingIdRef.current = id;
+        setSpeakingId(id);
+        setAvatarState('speaking');
+      },
+      onEnd: () => {
+        if (speakTokenRef.current !== token) return;
+        speakingIdRef.current = null;
+        setSpeakingId(null);
+        setAvatarState('standby');
+      },
+    });
+  }, []);
+
+  const stopSpeak = useCallback(() => {
+    speakTokenRef.current++;
+    stopSpeaking();
+    speakingIdRef.current = null;
+    setSpeakingId(null);
+    setAvatarState('standby');
+  }, []);
+
+  const toggleSpeak = useCallback(
+    (id: string, rawText: string) => {
+      if (speakingIdRef.current === id) stopSpeak();
+      else speak(id, rawText);
+    },
+    [speak, stopSpeak],
+  );
 
   // ─── Plan / report ────────────────────────────────────────
   const applyPlan = useCallback((taskTexts: string[]) => {
@@ -328,16 +378,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setStreaming(false);
       streamingRef.current = false;
 
-      const speakable = cleanTextForTTS(finalText);
-      if (speakable) {
-        speakText(speakable, {
-          onStart: () => setAvatarState('speaking'),
-          onEnd: () => setAvatarState('standby'),
-        });
-      }
+      speak(assistantId, finalText);
       if (signal) setTimeout(() => dispatchSignalRef.current(signal), 600);
     },
-    [persist],
+    [persist, speak],
   );
 
   const submitUserTurn = useCallback(
@@ -363,6 +407,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
     },
     [submitUserTurn],
   );
+
+  const startNewConsultation = useCallback(async () => {
+    stopSpeak();
+    let opening = FALLBACK_OPENING;
+    try {
+      const o = await api.getOpening();
+      opening = o.opening || FALLBACK_OPENING;
+    } catch {
+      /* use fallback */
+    }
+    await api.clearMessages().catch(swallow);
+    const openMsg: ChatMessage = { id: uid('a'), role: 'assistant', content: opening };
+    messagesRef.current = [openMsg];
+    setMessages([openMsg]);
+    persist('assistant', openMsg.content);
+  }, [persist, stopSpeak]);
 
   // ─── Diagnosis results (from ModalHost) ───────────────────
   const submitFaceResult = useCallback(
@@ -595,6 +655,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       streaming,
       sendUserMessage,
       avatarState,
+      speakingId,
+      toggleSpeak,
+      startNewConsultation,
       healthReport,
       hasPlan,
       tasks,
@@ -632,6 +695,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       streaming,
       sendUserMessage,
       avatarState,
+      speakingId,
+      toggleSpeak,
+      startNewConsultation,
       healthReport,
       hasPlan,
       tasks,

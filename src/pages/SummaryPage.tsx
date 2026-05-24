@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from 'react';
+import { useState, type CSSProperties, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Camera,
@@ -492,28 +492,153 @@ function ReportSection({ title, body }: { title: string; body: string }) {
   );
 }
 
-const H3: CSSProperties = {
-  margin: '0 0 10px',
-  fontSize: 17,
+const SECTION_TITLE: CSSProperties = {
+  margin: '0 0 12px',
+  fontSize: 16,
   fontWeight: 700,
-  color: '#000',
+  color: '#2a2a2a',
   fontFamily: 'var(--font-display)',
 };
-const BODY: CSSProperties = { fontSize: 14, color: '#6b5d4f', lineHeight: 1.7 };
+const CARD: CSSProperties = {
+  background: '#fff',
+  borderRadius: 16,
+  padding: 16,
+  boxShadow: '0 1px 6px rgba(107,93,79,0.07)',
+  border: '1px solid rgba(123,140,118,0.14)',
+};
+const ADVICE_ITEM: CSSProperties = {
+  fontSize: 13.5,
+  color: '#6b5d4f',
+  lineHeight: 1.7,
+  marginBottom: 4,
+};
 
-function sizhenBlock(label: string, sec: SizhenSection | undefined) {
-  if (!sec || !sec.items?.length) return null;
+function statusColor(status?: string): { bg: string; fg: string } {
+  const s = status ?? '';
+  if (/正常|平和|尚和|基本/.test(s)) return { bg: 'rgba(123,140,118,0.16)', fg: '#5f7059' };
+  if (/重点|异常/.test(s)) return { bg: 'rgba(194,71,61,0.12)', fg: '#c2473d' };
+  if (/未完成|未采集/.test(s)) return { bg: 'rgba(0,0,0,0.05)', fg: '#9a8e80' };
+  return { bg: 'rgba(212,165,116,0.18)', fg: '#a9772f' };
+}
+
+function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div style={{ marginBottom: 12 }}>
-      <div style={{ fontSize: 14, fontWeight: 600, color: '#7b8c76', marginBottom: 4 }}>
-        {label} · {sec.status}
+    <div style={{ marginBottom: 22 }}>
+      <h3 style={SECTION_TITLE}>{title}</h3>
+      {children}
+    </div>
+  );
+}
+
+function SizhenCard({ label, sec }: { label: string; sec?: SizhenSection }) {
+  const empty = !sec || !sec.items?.length;
+  const status = empty ? '未完成' : sec!.status;
+  const sc = statusColor(status);
+  return (
+    <div style={CARD}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: empty ? 0 : 8,
+        }}
+      >
+        <span style={{ fontSize: 13, fontWeight: 700, color: '#5a4a3a' }}>{label}</span>
+        <span
+          style={{
+            fontSize: 11,
+            padding: '2px 9px',
+            borderRadius: 999,
+            background: sc.bg,
+            color: sc.fg,
+          }}
+        >
+          {status}
+        </span>
       </div>
-      {sec.items.map((it, i) => (
-        <div key={i} style={BODY}>
-          {it.key}：{it.value}
-          {it.tag ? `（${it.tag}）` : ''}
+      {empty ? null : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {sec!.items.map((it, i) => (
+            <div
+              key={i}
+              style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12.5 }}
+            >
+              <span style={{ color: '#9a8e80', flexShrink: 0 }}>{it.key}</span>
+              <span style={{ color: '#5a4a3a', fontWeight: 500, textAlign: 'right' }}>
+                {it.value}
+                {it.tag ? ` · ${it.tag}` : ''}
+              </span>
+            </div>
+          ))}
         </div>
-      ))}
+      )}
+    </div>
+  );
+}
+
+function Pill({ children, tone = 'green' }: { children: ReactNode; tone?: 'green' | 'gold' }) {
+  const c =
+    tone === 'gold'
+      ? { bg: 'rgba(212,165,116,0.18)', fg: '#a9772f' }
+      : { bg: 'rgba(123,140,118,0.14)', fg: '#5f7059' };
+  return (
+    <span
+      style={{
+        display: 'inline-block',
+        padding: '4px 11px',
+        margin: '0 6px 6px 0',
+        fontSize: 12,
+        fontWeight: 500,
+        borderRadius: 999,
+        background: c.bg,
+        color: c.fg,
+      }}
+    >
+      {children}
+    </span>
+  );
+}
+
+function Badge({ text, tone }: { text: string; tone: 'gold' | 'green' }) {
+  const c =
+    tone === 'gold'
+      ? { bg: 'rgba(212,165,116,0.2)', fg: '#a9772f' }
+      : { bg: 'rgba(123,140,118,0.18)', fg: '#5f7059' };
+  return (
+    <span
+      style={{
+        marginLeft: 8,
+        fontSize: 10.5,
+        fontWeight: 600,
+        padding: '1px 7px',
+        borderRadius: 999,
+        background: c.bg,
+        color: c.fg,
+        verticalAlign: 'middle',
+      }}
+    >
+      {text}
+    </span>
+  );
+}
+
+function AdviceGroup({
+  title,
+  badge,
+  children,
+}: {
+  title: string;
+  badge?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ fontSize: 13.5, fontWeight: 700, color: '#7b8c76', marginBottom: 6 }}>
+        {title}
+        {badge}
+      </div>
+      {children}
     </div>
   );
 }
@@ -522,6 +647,13 @@ function ReportDetail({ hr, onClose }: { hr: HealthReport; onClose: () => void }
   const r = hr.report;
   const a = r?.analysis;
   const adv = r?.advice;
+
+  const analysisRow = (k: string, v: ReactNode) => (
+    <div style={{ display: 'flex', gap: 12, marginBottom: 8 }}>
+      <span style={{ fontSize: 12.5, color: '#9a8e80', width: 64, flexShrink: 0 }}>{k}</span>
+      <span style={{ fontSize: 13.5, color: '#5a4a3a', flex: 1 }}>{v}</span>
+    </div>
+  );
 
   return (
     <div
@@ -564,117 +696,192 @@ function ReportDetail({ hr, onClose }: { hr: HealthReport; onClose: () => void }
           </button>
         </div>
 
-        <p style={{ ...BODY, marginTop: 0, marginBottom: 20 }}>
-          {r?.patientName ? `${r.patientName} · ` : ''}
-          {r?.age ? `${r.age} · ` : ''}
-          {hr.date}
-          {r?.chiefComplaint ? ` · 主诉：${r.chiefComplaint}` : ''}
+        <p style={{ margin: '0 0 20px', fontSize: 12.5, color: '#9a8e80' }}>
+          四诊合参 · 辨证论治 · {hr.date}
         </p>
 
         {r?.doctorNote && (
           <div
             style={{
-              background: 'rgba(123,140,118,0.1)',
-              borderRadius: 14,
-              padding: 16,
-              marginBottom: 20,
-              fontSize: 15,
-              color: '#5a4a3a',
-              lineHeight: 1.7,
+              ...CARD,
+              background: 'linear-gradient(135deg, rgba(123,140,118,0.12), rgba(215,200,176,0.14))',
+              marginBottom: 22,
             }}
           >
-            {r.doctorNote}
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#7b8c76', marginBottom: 6 }}>大夫的话</div>
+            <div style={{ fontSize: 15, color: '#5a4a3a', lineHeight: 1.75 }}>{r.doctorNote}</div>
           </div>
         )}
 
-        <div style={{ marginBottom: 20 }}>
-          <h3 style={H3}>四诊摘要</h3>
+        {(r?.patientName || r?.age || r?.chiefComplaint || r?.bodyType) && (
+          <div style={{ ...CARD, marginBottom: 22 }}>
+            {r?.patientName && analysisRow('称呼', r.patientName)}
+            {r?.age && analysisRow('年龄', r.age)}
+            {r?.chiefComplaint && analysisRow('主诉', r.chiefComplaint)}
+            {r?.bodyType && analysisRow('体型', r.bodyType)}
+          </div>
+        )}
+
+        <Section title="四诊合参摘要">
           {r?.sizhen ? (
-            <>
-              {sizhenBlock('望诊·面色', r.sizhen.face)}
-              {sizhenBlock('望诊·舌象', r.sizhen.tongue)}
-              {sizhenBlock('闻诊·语声', r.sizhen.voice)}
-              {sizhenBlock('问诊', r.sizhen.inquiry)}
-            </>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <SizhenCard label="望 · 面色" sec={r.sizhen.face} />
+              <SizhenCard label="望 · 舌象" sec={r.sizhen.tongue} />
+              <SizhenCard label="闻 · 语声" sec={r.sizhen.voice} />
+              <SizhenCard label="问 · 主诉" sec={r.sizhen.inquiry} />
+            </div>
           ) : (
-            <>
-              {hr.faceAnalysis && <div style={BODY}>面色：{hr.faceAnalysis}</div>}
-              {hr.voiceAnalysis && <div style={BODY}>声音：{hr.voiceAnalysis}</div>}
-            </>
+            <div style={CARD}>
+              {hr.faceAnalysis && <div style={ADVICE_ITEM}>面色：{hr.faceAnalysis}</div>}
+              {hr.voiceAnalysis && <div style={ADVICE_ITEM}>声音：{hr.voiceAnalysis}</div>}
+            </div>
           )}
-        </div>
+        </Section>
 
         {a && (
-          <div style={{ marginBottom: 20 }}>
-            <h3 style={H3}>辨证分析</h3>
-            {a.bagang && <div style={BODY}>八纲：{a.bagang}</div>}
-            {a.organs && <div style={BODY}>病位：{a.organs}</div>}
-            {a.nature && <div style={BODY}>病性：{a.nature}</div>}
-            {a.zhengxing?.length ? <div style={BODY}>证型：{a.zhengxing.join('、')}</div> : null}
-            {a.tizhi && (
-              <div style={BODY}>
-                体质：{a.tizhi}
-                {a.tizhiNote ? `（${a.tizhiNote}）` : ''}
-              </div>
-            )}
-          </div>
-        )}
+          <Section title="辨证分析">
+            <div style={CARD}>
+              {a.bagang && analysisRow('八纲定位', <strong style={{ color: '#7b8c76' }}>{a.bagang}</strong>)}
+              {a.organs && analysisRow('病位脏腑', a.organs)}
+              {a.nature && analysisRow('病性归纳', a.nature)}
+              {a.zhengxing?.length
+                ? analysisRow('主要证型', <span>{a.zhengxing.map((z, i) => <Pill key={i}>{z}</Pill>)}</span>)
+                : null}
+              {a.tizhi
+                ? analysisRow(
+                    '体质辨识',
+                    <span>
+                      <Pill tone="gold">{a.tizhi}</Pill>
+                      {a.tizhiNote ? (
+                        <span style={{ fontSize: 12, color: '#9a8e80' }}>（{a.tizhiNote}）</span>
+                      ) : null}
+                    </span>,
+                  )
+                : null}
 
-        {r?.reasoning?.length ? (
-          <div style={{ marginBottom: 20 }}>
-            <h3 style={H3}>辨证推理</h3>
-            {r.reasoning.map((step, i) => (
-              <div key={i} style={{ ...BODY, marginBottom: 6 }}>
-                <span style={{ color: '#7b8c76' }}>· {step.observation}</span>
-                {step.principle ? ` — ${step.principle}` : ''}
-              </div>
-            ))}
-          </div>
-        ) : null}
+              {r?.reasoning?.length ? (
+                <div
+                  style={{
+                    marginTop: 12,
+                    paddingTop: 14,
+                    borderTop: '1px dashed rgba(123,140,118,0.3)',
+                  }}
+                >
+                  <div style={{ fontSize: 12.5, fontWeight: 700, color: '#7b8c76', marginBottom: 10 }}>
+                    我是怎么得出这个判断的
+                  </div>
+                  {r.reasoning.map((step, i) => (
+                    <div key={i} style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
+                      <div
+                        style={{
+                          flexShrink: 0,
+                          width: 22,
+                          height: 22,
+                          borderRadius: 999,
+                          background: '#7b8c76',
+                          color: '#fff',
+                          fontSize: 12,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        {i + 1}
+                      </div>
+                      <div style={{ fontSize: 13, color: '#5a4a3a', lineHeight: 1.6 }}>
+                        <span style={{ color: '#7b8c76' }}>{step.observation}</span>
+                        {step.principle ? ` → ${step.principle}` : ''}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          </Section>
+        )}
 
         {adv && (
-          <div style={{ marginBottom: 20 }}>
-            <h3 style={H3}>调养建议</h3>
-            {adv.zhifa && <div style={{ ...BODY, marginBottom: 8 }}>治法：{adv.zhifa}</div>}
-            {adv.food?.recommended?.length ? (
-              <div style={BODY}>推荐食材：{adv.food.recommended.join('、')}</div>
-            ) : null}
-            {adv.food?.recipes?.map((rec, i) => (
-              <div key={i} style={BODY}>
-                {rec.name}：{rec.detail}
-              </div>
-            ))}
-            {adv.food?.avoid && <div style={BODY}>忌口：{adv.food.avoid}</div>}
-            {adv.lifestyle?.length ? (
-              <div style={{ marginTop: 8 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: '#7b8c76' }}>生活调摄</div>
-                {adv.lifestyle.map((l, i) => (
-                  <div key={i} style={BODY}>· {l}</div>
-                ))}
-              </div>
-            ) : null}
-            {adv.acupoints?.length ? (
-              <div style={{ marginTop: 8 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: '#7b8c76' }}>穴位保健</div>
-                {adv.acupoints.map((p, i) => (
-                  <div key={i} style={BODY}>
-                    {p.name}
-                    {p.location ? `（${p.location}）` : ''}
-                    {p.method ? `：${p.method}` : ''}
-                    {p.effect ? ` — ${p.effect}` : ''}
+          <Section title="调养方案">
+            <div style={CARD}>
+              {adv.zhifa && (
+                <AdviceGroup title="治法总纲">
+                  <div style={ADVICE_ITEM}>
+                    以<strong style={{ color: '#2a2a2a' }}>{adv.zhifa}</strong>为根本大法。
                   </div>
-                ))}
-              </div>
-            ) : null}
-            {adv.exercise && <div style={{ ...BODY, marginTop: 8 }}>养生功法：{adv.exercise}</div>}
-            {adv.warning && (
-              <div style={{ ...BODY, marginTop: 8, color: '#c2473d' }}>注意：{adv.warning}</div>
-            )}
-          </div>
+                </AdviceGroup>
+              )}
+
+              {adv.food && (
+                <AdviceGroup title="食疗调理" badge={<Badge text="最重要" tone="gold" />}>
+                  {adv.food.recommended?.length || adv.food.recipes?.length ? (
+                    <div
+                      style={{
+                        background: 'rgba(123,140,118,0.07)',
+                        borderRadius: 12,
+                        padding: 12,
+                        marginBottom: 6,
+                      }}
+                    >
+                      {adv.food.recommended?.length ? (
+                        <div style={{ marginBottom: adv.food.recipes?.length ? 8 : 0 }}>
+                          {adv.food.recommended.map((f, i) => (
+                            <Pill key={i}>{f}</Pill>
+                          ))}
+                        </div>
+                      ) : null}
+                      {adv.food.recipes?.map((rec, i) => (
+                        <div key={i} style={{ ...ADVICE_ITEM, marginBottom: 6 }}>
+                          <strong style={{ color: '#2a2a2a' }}>{rec.name}</strong>
+                          <br />
+                          <span style={{ fontSize: 12, color: '#9a8e80' }}>{rec.detail}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                  {adv.food.avoid && (
+                    <div style={{ ...ADVICE_ITEM, color: '#c2473d' }}>忌口提醒：{adv.food.avoid}</div>
+                  )}
+                </AdviceGroup>
+              )}
+
+              {adv.lifestyle?.length ? (
+                <AdviceGroup title="作息起居" badge={<Badge text="坚持" tone="green" />}>
+                  {adv.lifestyle.map((l, i) => (
+                    <div key={i} style={ADVICE_ITEM}>· {l}</div>
+                  ))}
+                </AdviceGroup>
+              ) : null}
+
+              {adv.acupoints?.length ? (
+                <AdviceGroup title="穴位自我保健">
+                  {adv.acupoints.map((p, i) => (
+                    <div key={i} style={ADVICE_ITEM}>
+                      <strong style={{ color: '#2a2a2a' }}>{p.name}</strong>
+                      {p.location ? `（${p.location}）` : ''}
+                      {p.method ? `：${p.method}` : ''}
+                      {p.effect ? <span style={{ color: '#9a8e80' }}> · 功效：{p.effect}</span> : null}
+                    </div>
+                  ))}
+                </AdviceGroup>
+              ) : null}
+
+              {adv.exercise && (
+                <AdviceGroup title="养生功法">
+                  <div style={ADVICE_ITEM}>{adv.exercise}</div>
+                </AdviceGroup>
+              )}
+
+              {adv.warning && (
+                <AdviceGroup title="特别叮嘱">
+                  <div style={{ ...ADVICE_ITEM, color: '#c2473d', marginBottom: 0 }}>{adv.warning}</div>
+                </AdviceGroup>
+              )}
+            </div>
+          </Section>
         )}
 
-        <p style={{ fontSize: 12, color: 'rgba(107,93,79,0.7)', lineHeight: 1.6, marginTop: 24 }}>
-          本报告由 AI 中医助手生成，仅供健康参考。如有不适，请及时到正规医疗机构就诊。涉及用药建议时，请在执业中医师指导下使用。
+        <p style={{ fontSize: 12, color: 'rgba(107,93,79,0.7)', lineHeight: 1.6, marginTop: 8 }}>
+          本报告由脉大夫 AI 中医助手基于四诊信息自动生成，仅供参考与健康管理之用，不作为疾病诊断依据，不替代执业医师面诊开方。如有不适，请及时前往正规医疗机构就诊。
         </p>
       </div>
     </div>
