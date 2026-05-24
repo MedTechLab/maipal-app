@@ -230,6 +230,53 @@ client may send (e.g. iOS, Android-via-web, web).
   `myapp://oauth/microsoft` (or a custom scheme matching
   `VITE_MICROSOFT_REDIRECT_URL`). Request scopes `openid email profile`.
 
+## AI doctor (脉大夫)
+
+The chat doctor, 望诊 (face/tongue), 闻诊 (voice) and the rich调理 report are all
+powered by the Worker, ported from the `maipal-v5` prototype:
+
+- **Chat** — `POST /api/me/chat` streams from CodeBuddy (Tencent) with the persona
+  system prompt bundled at `worker/persona.json`. The doctor drives the flow by
+  emitting `tool_call` signals (`CAPTURE_FACE` / `CAPTURE_TONGUE` / `RECORD_VOICE` /
+  `GENERATE_REPORT`); the client parses them in `src/lib/tool-call.ts`.
+- **望诊 / 闻诊** — `POST /api/me/diagnosis/:kind`. Face/tongue photos go to a vision
+  model; 闻诊 is inferred from the speech-to-text transcript. Results are formatted
+  into the persona's `信号回传` text and re-injected into the conversation. Failures
+  degrade to `[望诊·失败]` / `[闻诊·失败]` so the doctor moves on.
+- **TTS** — `POST /api/me/tts` synthesizes via Microsoft edge-tts over an outbound
+  WebSocket (free `zh-CN-YunjianNeural` voice). This is an **undocumented endpoint
+  that Microsoft rotates**; on any failure the route returns 5xx and the client
+  silently falls back to the browser's `speechSynthesis` (`src/lib/tts.ts`). If
+  edge-tts starts returning 403, the synthesis is still correct per spec — MS is
+  rejecting the request; the fallback keeps the app usable.
+
+### Config
+
+```bash
+npx wrangler secret put CODEBUDDY_API_KEY     # required — powers chat + vision
+```
+
+Non-secret overrides live in `wrangler.toml [vars]` (sensible defaults if unset):
+
+| Var | Default | Notes |
+|---|---|---|
+| `CHAT_MODEL` | `claude-sonnet-4.6-1m` | Chat model on the CodeBuddy gateway. |
+| `VISION_MODEL` | `claude-sonnet-4.6-1m` | Multimodal model for 望诊 (must accept `image_url`). |
+| `TTS_VOICE` | `zh-CN-YunjianNeural` | edge-tts voice. |
+
+For local dev, add `CODEBUDDY_API_KEY=…` to `.dev.vars` (see `.dev.vars.example`).
+
+### Native permissions
+
+The digital-human avatar lives at `public/assets/mai-{standby,speaking}.mp4`
+(converted from the v5 GIFs). 望诊/闻诊 use the camera and microphone, so after
+`cap add ios` add to `ios/App/App/Info.plist`:
+
+```xml
+<key>NSCameraUsageDescription</key><string>用于面部气色与舌象分析</string>
+<key>NSMicrophoneUsageDescription</key><string>用于语声分析（闻诊）</string>
+```
+
 ## Brand guardrails (do not break)
 
 - **Background:** every full-screen surface uses the shan-shui photo behind a

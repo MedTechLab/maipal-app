@@ -3,62 +3,62 @@ import { useNavigate } from 'react-router-dom';
 import { Mic, Send } from 'lucide-react';
 import { ShanShuiBackground } from '../components/ShanShuiBackground';
 import { SettingsTile } from '../components/SettingsTile';
-import { QuickChip } from '../components/QuickChip';
 import { ShiqingButton } from '../components/ShiqingButton';
+import { DoctorAvatar } from '../components/DoctorAvatar';
 import { useApp } from '../contexts/AppContext';
+import { startRecognition, type SttController } from '../lib/stt';
 
 export function ChatPage() {
   const nav = useNavigate();
   const app = useApp();
-  const { user, messages, addMessage } = app;
+  const { user, messages, streaming, sendUserMessage, healthReport } = app;
 
   const [input, setInput] = useState('');
-  const [step, setStep] = useState<0 | 2 | 3 | 4>(0);
+  const [listening, setListening] = useState(false);
   const scrollerRef = useRef<HTMLDivElement>(null);
+  const sttRef = useRef<SttController | null>(null);
 
   useEffect(() => {
     if (scrollerRef.current) {
       scrollerRef.current.scrollTop = scrollerRef.current.scrollHeight;
     }
-  }, [messages]);
+  }, [messages, streaming]);
 
-  useEffect(() => {
-    if (step === 2) {
-      const t = setTimeout(() => {
-        addMessage('assistant', '我看您今天气色略偏淡，声音也略显疲惫。最近睡眠怎么样？');
-        setStep(3);
-      }, 600);
-      return () => clearTimeout(t);
-    }
-  }, [step, addMessage]);
+  useEffect(() => () => sttRef.current?.stop(), []);
 
   const send = (txt: string) => {
-    if (!txt.trim()) return;
-    addMessage('user', txt);
+    const t = txt.trim();
+    if (!t || streaming) return;
+    sendUserMessage(t);
     setInput('');
-    setTimeout(() => {
-      if (step === 0 && txt.includes('需要') && !txt.includes('不需要')) {
-        addMessage('assistant', '我先看看你的气色。');
-        setTimeout(() => app.runCheckup(() => setStep(2)), 700);
-      } else if (step === 0 && txt.includes('不需要')) {
-        addMessage('assistant', '好的，有需要随时来找我，我会一直陪伴着你。😊');
-      } else if (step === 3) {
-        if (txt.includes('睡') || txt.includes('失眠') || txt.includes('不太好')) {
-          addMessage('assistant', '了解了。建议您每晚11点前入睡，睡前可以泡泡脚放松身心。');
-        } else {
-          addMessage('assistant', '感谢您的回答。');
-        }
-        setTimeout(() => {
-          addMessage('assistant', '检测完成！我已经为您准备了详细的健康建议。');
-          setStep(4);
-        }, 1200);
-      } else {
-        addMessage('assistant', '我明白了，让我继续为您分析。');
-      }
-    }, 700);
   };
 
-  const showQuickReply = step === 0 || step === 3;
+  const toggleMic = () => {
+    if (listening) {
+      sttRef.current?.stop();
+      sttRef.current = null;
+      setListening(false);
+      return;
+    }
+    const ctrl = startRecognition({
+      onPartial: (text) => setInput(text),
+      onEnd: () => {
+        sttRef.current = null;
+        setListening(false);
+      },
+      onError: () => {
+        sttRef.current = null;
+        setListening(false);
+      },
+    });
+    if (ctrl) {
+      sttRef.current = ctrl;
+      setListening(true);
+    }
+  };
+
+  const lastMsg = messages[messages.length - 1];
+  const showThinking = streaming && lastMsg?.role === 'assistant' && !lastMsg.content;
 
   return (
     <div className="app-frame" style={{ position: 'relative' }}>
@@ -67,7 +67,7 @@ export function ChatPage() {
       <div className="shanshui-head">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <p className="mp-h1" style={{ margin: 0 }}>你好，{user?.name || '朋友'}</p>
-          <p className="mp-h1" style={{ margin: 0 }}>我是脉医生</p>
+          <p className="mp-h1" style={{ margin: 0 }}>我是脉大夫</p>
         </div>
         <SettingsTile />
       </div>
@@ -82,11 +82,7 @@ export function ChatPage() {
           pointerEvents: 'none',
         }}
       >
-        <img
-          src="/assets/doctor-maipal.png"
-          alt="脉医生"
-          style={{ height: 360, width: 170, objectFit: 'contain', objectPosition: 'bottom' }}
-        />
+        <DoctorAvatar height={360} />
       </div>
 
       <div
@@ -97,7 +93,7 @@ export function ChatPage() {
           left: 24,
           right: 24,
           top: 145,
-          bottom: showQuickReply ? 130 : 100,
+          bottom: 100,
           overflowY: 'auto',
           zIndex: 30,
         }}
@@ -115,6 +111,7 @@ export function ChatPage() {
           {messages.map((m, idx) => {
             const old = idx < messages.length - 3;
             const opacity = old && m.role === 'assistant' ? 0.65 : 1;
+            if (m.role === 'assistant' && !m.content) return null;
             return (
               <div
                 key={m.id}
@@ -125,13 +122,18 @@ export function ChatPage() {
                   opacity,
                 }}
               >
-                <div className={m.role === 'user' ? 'bubble-user' : 'bubble-ai'}>
-                  {m.content}
-                </div>
+                <div className={m.role === 'user' ? 'bubble-user' : 'bubble-ai'}>{m.content}</div>
               </div>
             );
           })}
-          {step === 4 && (
+
+          {showThinking && (
+            <div className="anim-rise" style={{ display: 'flex', justifyContent: 'flex-start' }}>
+              <div className="bubble-ai" style={{ letterSpacing: 2 }}>···</div>
+            </div>
+          )}
+
+          {healthReport && (
             <div
               className="anim-rise"
               style={{ display: 'flex', justifyContent: 'center', paddingTop: 4 }}
@@ -141,35 +143,6 @@ export function ChatPage() {
           )}
         </div>
       </div>
-
-      {showQuickReply && (
-        <div
-          className="anim-rise"
-          style={{
-            position: 'absolute',
-            left: 24,
-            right: 24,
-            bottom: 70,
-            zIndex: 40,
-            display: 'flex',
-            gap: 12,
-            overflowX: 'auto',
-          }}
-        >
-          {step === 0 && (
-            <>
-              <QuickChip onClick={() => send('需要检测')} dot>需要检测</QuickChip>
-              <QuickChip onClick={() => send('暂时不需要')}>暂时不需要</QuickChip>
-            </>
-          )}
-          {step === 3 && (
-            <>
-              <QuickChip onClick={() => send('睡眠不太好')} dot>睡眠不太好</QuickChip>
-              <QuickChip onClick={() => send('还可以')}>还可以</QuickChip>
-            </>
-          )}
-        </div>
-      )}
 
       <div style={{ position: 'absolute', left: 24, right: 24, bottom: 14, zIndex: 40 }}>
         <div style={{ position: 'relative', height: 51, display: 'flex', alignItems: 'center' }}>
@@ -201,7 +174,8 @@ export function ChatPage() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && send(input)}
-              placeholder="输入您的回答..."
+              placeholder={streaming ? '脉大夫正在回复…' : '输入您的回答...'}
+              disabled={streaming}
               style={{
                 flex: 1,
                 background: 'transparent',
@@ -214,20 +188,16 @@ export function ChatPage() {
               }}
             />
             <button
-              style={{
-                background: 'transparent',
-                border: 'none',
-                padding: 4,
-                cursor: 'pointer',
-              }}
-              aria-label="语音"
+              onClick={toggleMic}
+              style={{ background: 'transparent', border: 'none', padding: 4, cursor: 'pointer' }}
+              aria-label="语音输入"
             >
-              <Mic size={20} color="#7B8C76" />
+              <Mic size={20} color={listening ? '#c2473d' : '#7B8C76'} />
             </button>
           </div>
           <button
             onClick={() => send(input)}
-            disabled={!input.trim()}
+            disabled={!input.trim() || streaming}
             aria-label="发送"
             style={{
               position: 'absolute',
@@ -241,8 +211,8 @@ export function ChatPage() {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              opacity: input.trim() ? 1 : 0.6,
-              cursor: input.trim() ? 'pointer' : 'default',
+              opacity: input.trim() && !streaming ? 1 : 0.6,
+              cursor: input.trim() && !streaming ? 'pointer' : 'default',
             }}
           >
             <Send size={18} />

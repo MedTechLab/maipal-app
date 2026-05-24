@@ -1,26 +1,32 @@
 import { X } from 'lucide-react';
 
 type State = 'ready' | 'observing' | 'holding' | 'done';
+type Kind = 'face' | 'tongue';
 
 type Props = {
   open: boolean;
   state: State;
+  kind?: Kind;
   onStart: () => void;
   onClose: () => void;
 };
 
 const TEXTS: Record<State, { main: string; sub: string }> = {
-  ready: { main: '脉医生准备看一看', sub: '建议在光线自然的环境下进行' },
-  observing: { main: '脉医生正在观察中…', sub: '请放松，不需要刻意调整' },
+  ready: { main: '脉大夫准备看一看', sub: '建议在光线自然的环境下进行' },
+  observing: { main: '脉大夫正在观察中…', sub: '请放松，不需要刻意调整' },
   holding: { main: '很好，保持一下', sub: '自然看向屏幕就好' },
   done: { main: '好了，我们继续聊聊', sub: '谢谢配合，我已经大致看过了' },
 };
 
 const PROGRESS: Record<State, number> = { ready: 0, observing: 1, holding: 2, done: 3 };
 
-export function FaceObservationModal({ open, state, onStart, onClose }: Props) {
+export function FaceObservationModal({ open, state, kind = 'face', onStart, onClose }: Props) {
   if (!open) return null;
   const t = TEXTS[state];
+  const isTongue = kind === 'tongue';
+  const heading = isTongue ? '我看看您的舌头' : '我先看看您的气色';
+  const subheading = isTongue ? '请伸出舌头，正对屏幕' : '请看向屏幕，保持自然表情';
+  const frameHint = isTongue ? '请将舌头保持在框内' : '请将面部保持在框内';
   const btnDisabled = state === 'observing' || state === 'holding';
   const btnLabel = state === 'ready' ? '开始' : state === 'done' ? '继续聊天' : '正在看…';
   const progressIdx = PROGRESS[state];
@@ -66,11 +72,9 @@ export function FaceObservationModal({ open, state, onStart, onClose }: Props) {
 
           <div style={{ textAlign: 'center', marginBottom: 20 }}>
             <h2 style={{ margin: '0 0 8px', fontSize: 24, fontWeight: 500, color: '#7b8c76' }}>
-              我先看看您的气色
+              {heading}
             </h2>
-            <p style={{ margin: 0, fontSize: 15, color: '#6b5d4f' }}>
-              请看向屏幕，保持自然表情
-            </p>
+            <p style={{ margin: 0, fontSize: 15, color: '#6b5d4f' }}>{subheading}</p>
           </div>
 
           <div
@@ -121,7 +125,7 @@ export function FaceObservationModal({ open, state, onStart, onClose }: Props) {
                 fontSize: 13,
               }}
             >
-              请将面部保持在框内
+              {frameHint}
             </div>
           </div>
 

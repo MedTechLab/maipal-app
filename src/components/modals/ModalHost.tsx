@@ -3,112 +3,133 @@ import { useApp } from '../../contexts/AppContext';
 import { PermissionModal } from './PermissionModal';
 import { FaceObservationModal } from './FaceObservationModal';
 import { VoiceListeningModal } from './VoiceListeningModal';
+import { capturePhoto, requestCameraPermission } from '../../lib/capture';
+import { startRecognition, type SttController } from '../../lib/stt';
+
+const MAX_REC_SECONDS = 20;
 
 /**
- * Orchestrates the global modal flow:
- *   camera permission → face observation → mic permission → voice listening → finish
+ * Bridges the presentational modals to real device APIs + the AppContext signal
+ * flow: camera permission → photo capture → 望诊; mic permission → speech-to-text → 闻诊.
  */
 export function ModalHost() {
   const app = useApp();
   const recTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const sttRef = useRef<SttController | null>(null);
+  const transcriptRef = useRef('');
+  const submittedRef = useRef(false);
 
-  // After face-observation auto-advances through its states, kick to voice
-  const faceTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
-
-  const onFaceStart = () => {
-    app.openFaceModal('observing');
-    faceTimers.current = [
-      setTimeout(() => app.openFaceModal('holding'), 1800),
-      setTimeout(() => app.openFaceModal('done'), 3600),
-      setTimeout(() => {
-        app.openFaceModal(null);
-        if (app.micPerm === null) app.openPermModal('mic');
-        else if (app.micPerm) app.openVoiceModal('ready');
-        else app.finishCheckup();
-      }, 5000),
-    ];
+  const clearTimer = () => {
+    if (recTimer.current) {
+      clearInterval(recTimer.current);
+      recTimer.current = null;
+    }
   };
 
+  const stopVoiceCapture = () => {
+    clearTimer();
+    sttRef.current?.stop();
+    sttRef.current = null;
+  };
+
+  const finishVoice = () => {
+    if (submittedRef.current) return;
+    submittedRef.current = true;
+    stopVoiceCapture();
+    app.submitVoiceResult(transcriptRef.current);
+  };
+
+  useEffect(
+    () => () => {
+      clearTimer();
+      sttRef.current?.stop();
+    },
+    [],
+  );
+
+  // ─── Permissions ──────────────────────────────────────────
+  const onCameraAllow = async () => {
+    const granted = await requestCameraPermission().catch(() => false);
+    app.onPermissionResult('camera', granted);
+  };
+
+  const onMicAllow = async () => {
+    let granted = false;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach((t) => t.stop());
+      granted = true;
+    } catch {
+      granted = false;
+    }
+    app.onPermissionResult('mic', granted);
+  };
+
+  // ─── Face / tongue capture ────────────────────────────────
+  const onFaceStart = async () => {
+    try {
+      const image = await capturePhoto();
+      app.submitFaceResult(image);
+    } catch {
+      app.cancelFace();
+    }
+  };
+
+  // ─── Voice recording ──────────────────────────────────────
   const onVoiceStart = () => {
+    submittedRef.current = false;
+    transcriptRef.current = '';
     app.openVoiceModal('recording');
     app.setRecTime(0);
     let t = 0;
     recTimer.current = setInterval(() => {
       t += 1;
       app.setRecTime(t);
+      if (t >= MAX_REC_SECONDS) finishVoice();
     }, 1000);
-    setTimeout(() => {
-      if (recTimer.current) clearInterval(recTimer.current);
-      app.openVoiceModal('done');
-      setTimeout(() => {
-        app.openVoiceModal(null);
-        app.finishCheckup();
-      }, 900);
-    }, 3000);
+    sttRef.current = startRecognition({
+      onPartial: (text) => {
+        transcriptRef.current = text;
+      },
+      onEnd: (finalText) => {
+        if (finalText) transcriptRef.current = finalText;
+        finishVoice();
+      },
+      onError: () => {
+        // keep the timer running — the user can stop manually
+      },
+    });
   };
-
-  useEffect(
-    () => () => {
-      faceTimers.current.forEach(clearTimeout);
-      if (recTimer.current) clearInterval(recTimer.current);
-    },
-    [],
-  );
 
   return (
     <>
       <PermissionModal
         open={app.permModal === 'camera'}
         type="camera"
-        onAllow={() => {
-          app.setCameraPerm(true);
-          app.openPermModal(null);
-          setTimeout(() => app.openFaceModal('ready'), 300);
-        }}
-        onDeny={() => {
-          app.setCameraPerm(false);
-          app.openPermModal(null);
-          setTimeout(() => {
-            if (app.micPerm === null) app.openPermModal('mic');
-            else if (app.micPerm) app.openVoiceModal('ready');
-            else app.finishCheckup();
-          }, 300);
-        }}
+        onAllow={onCameraAllow}
+        onDeny={() => app.onPermissionResult('camera', false)}
       />
       <PermissionModal
         open={app.permModal === 'mic'}
         type="mic"
-        onAllow={() => {
-          app.setMicPerm(true);
-          app.openPermModal(null);
-          setTimeout(() => app.openVoiceModal('ready'), 300);
-        }}
-        onDeny={() => {
-          app.setMicPerm(false);
-          app.openPermModal(null);
-          setTimeout(() => app.finishCheckup(), 300);
-        }}
+        onAllow={onMicAllow}
+        onDeny={() => app.onPermissionResult('mic', false)}
       />
       <FaceObservationModal
         open={!!app.faceModal}
         state={app.faceModal || 'ready'}
+        kind={app.faceKind}
         onStart={onFaceStart}
-        onClose={() => {
-          faceTimers.current.forEach(clearTimeout);
-          app.openFaceModal(null);
-          app.resolveCheckup();
-        }}
+        onClose={app.cancelFace}
       />
       <VoiceListeningModal
         open={!!app.voiceModal}
         state={app.voiceModal || 'ready'}
-        onStart={onVoiceStart}
-        onSkip={() => {
-          if (recTimer.current) clearInterval(recTimer.current);
-          app.openVoiceModal(null);
-          app.finishCheckup();
-        }}
+        guidance={app.voiceGuidance}
         time={app.recTime}
+        onStart={onVoiceStart}
+        onStop={finishVoice}
+        onSkip={app.cancelVoice}
       />
     </>
   );

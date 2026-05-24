@@ -7,3 +7,6 @@ GOOGLE_CLIENT_ID=
 APPLE_CLIENT_ID=
 MICROSOFT_CLIENT_ID=
 MICROSOFT_TENANT=common
+
+# AI layer — CodeBuddy (Tencent) key powering chat + 望诊/闻诊 vision.
+CODEBUDDY_API_KEY=

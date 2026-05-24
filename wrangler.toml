@@ -23,14 +23,14 @@ migrations_dir = "migrations"
 [observability]
 enabled = true
 
-# When you want to add an LLM proxy, uncomment one of these and read the key in
-# the worker:
-# [vars]
-# CHAT_MODEL = "claude-haiku-4-5-20251001"
-#
-# Or use a Workers AI binding:
-# [ai]
-# binding = "AI"
+# AI layer. The CodeBuddy API key is a secret — set it with
+#   npx wrangler secret put CODEBUDDY_API_KEY
+# (and in .dev.vars for local dev). These [vars] are non-secret model/voice
+# overrides; the worker falls back to sensible defaults when unset.
+[vars]
+CHAT_MODEL = "claude-sonnet-4.6-1m"
+VISION_MODEL = "claude-sonnet-4.6-1m"
+TTS_VOICE = "zh-CN-YunjianNeural"
 
 [env.production]
 # Customize for prod — separate D1 db, custom domain, etc.
