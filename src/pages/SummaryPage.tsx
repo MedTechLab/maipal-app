@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Camera,
@@ -12,8 +12,10 @@ import { ShanShuiBackground } from '../components/ShanShuiBackground';
 import { ShanShuiHeader } from '../components/ShanShuiHeader';
 import { PointsPill } from '../components/PointsPill';
 import { ShiqingButton } from '../components/ShiqingButton';
+import { X } from 'lucide-react';
 import { ConfirmModal } from '../components/modals/ConfirmModal';
-import { useApp } from '../contexts/AppContext';
+import { useApp, type HealthReport } from '../contexts/AppContext';
+import type { SizhenSection } from '../../worker/types';
 
 const DAY_NAMES = ['日', '一', '二', '三', '四', '五', '六'];
 
@@ -27,6 +29,7 @@ export function SummaryPage() {
   const [showCheckInModal, setShowCheckInModal] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [toast, setToast] = useState(false);
+  const [showFullReport, setShowFullReport] = useState(false);
 
   const today = new Date();
   const isToday = selectedDate.toDateString() === today.toDateString();
@@ -189,6 +192,7 @@ export function SummaryPage() {
                 ))}
               </div>
               <button
+                onClick={() => setShowFullReport(true)}
                 style={{
                   width: '100%',
                   height: 48,
@@ -469,6 +473,10 @@ export function SummaryPage() {
           <span style={{ fontSize: 16, fontWeight: 500 }}>获得 10 积分！</span>
         </div>
       )}
+
+      {showFullReport && healthReport && (
+        <ReportDetail hr={healthReport} onClose={() => setShowFullReport(false)} />
+      )}
     </div>
   );
 }
@@ -480,6 +488,195 @@ function ReportSection({ title, body }: { title: string; body: string }) {
         {title}
       </h3>
       <p style={{ margin: 0, fontSize: 14, color: '#6b5d4f', lineHeight: 1.6 }}>{body}</p>
+    </div>
+  );
+}
+
+const H3: CSSProperties = {
+  margin: '0 0 10px',
+  fontSize: 17,
+  fontWeight: 700,
+  color: '#000',
+  fontFamily: 'var(--font-display)',
+};
+const BODY: CSSProperties = { fontSize: 14, color: '#6b5d4f', lineHeight: 1.7 };
+
+function sizhenBlock(label: string, sec: SizhenSection | undefined) {
+  if (!sec || !sec.items?.length) return null;
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ fontSize: 14, fontWeight: 600, color: '#7b8c76', marginBottom: 4 }}>
+        {label} · {sec.status}
+      </div>
+      {sec.items.map((it, i) => (
+        <div key={i} style={BODY}>
+          {it.key}：{it.value}
+          {it.tag ? `（${it.tag}）` : ''}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ReportDetail({ hr, onClose }: { hr: HealthReport; onClose: () => void }) {
+  const r = hr.report;
+  const a = r?.analysis;
+  const adv = r?.advice;
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 200,
+        background: 'rgba(248,243,238,0.98)',
+        overflowY: 'auto',
+      }}
+    >
+      <div style={{ maxWidth: 480, margin: '0 auto', padding: '24px 24px 60px' }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: 16,
+          }}
+        >
+          <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: '#000', fontFamily: 'var(--font-display)' }}>
+            中医健康调理报告
+          </h2>
+          <button
+            onClick={onClose}
+            aria-label="关闭"
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 999,
+              border: 'none',
+              background: 'rgba(123,140,118,0.15)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+            }}
+          >
+            <X size={20} color="#5a4a3a" />
+          </button>
+        </div>
+
+        <p style={{ ...BODY, marginTop: 0, marginBottom: 20 }}>
+          {r?.patientName ? `${r.patientName} · ` : ''}
+          {r?.age ? `${r.age} · ` : ''}
+          {hr.date}
+          {r?.chiefComplaint ? ` · 主诉：${r.chiefComplaint}` : ''}
+        </p>
+
+        {r?.doctorNote && (
+          <div
+            style={{
+              background: 'rgba(123,140,118,0.1)',
+              borderRadius: 14,
+              padding: 16,
+              marginBottom: 20,
+              fontSize: 15,
+              color: '#5a4a3a',
+              lineHeight: 1.7,
+            }}
+          >
+            {r.doctorNote}
+          </div>
+        )}
+
+        <div style={{ marginBottom: 20 }}>
+          <h3 style={H3}>四诊摘要</h3>
+          {r?.sizhen ? (
+            <>
+              {sizhenBlock('望诊·面色', r.sizhen.face)}
+              {sizhenBlock('望诊·舌象', r.sizhen.tongue)}
+              {sizhenBlock('闻诊·语声', r.sizhen.voice)}
+              {sizhenBlock('问诊', r.sizhen.inquiry)}
+            </>
+          ) : (
+            <>
+              {hr.faceAnalysis && <div style={BODY}>面色：{hr.faceAnalysis}</div>}
+              {hr.voiceAnalysis && <div style={BODY}>声音：{hr.voiceAnalysis}</div>}
+            </>
+          )}
+        </div>
+
+        {a && (
+          <div style={{ marginBottom: 20 }}>
+            <h3 style={H3}>辨证分析</h3>
+            {a.bagang && <div style={BODY}>八纲：{a.bagang}</div>}
+            {a.organs && <div style={BODY}>病位：{a.organs}</div>}
+            {a.nature && <div style={BODY}>病性：{a.nature}</div>}
+            {a.zhengxing?.length ? <div style={BODY}>证型：{a.zhengxing.join('、')}</div> : null}
+            {a.tizhi && (
+              <div style={BODY}>
+                体质：{a.tizhi}
+                {a.tizhiNote ? `（${a.tizhiNote}）` : ''}
+              </div>
+            )}
+          </div>
+        )}
+
+        {r?.reasoning?.length ? (
+          <div style={{ marginBottom: 20 }}>
+            <h3 style={H3}>辨证推理</h3>
+            {r.reasoning.map((step, i) => (
+              <div key={i} style={{ ...BODY, marginBottom: 6 }}>
+                <span style={{ color: '#7b8c76' }}>· {step.observation}</span>
+                {step.principle ? ` — ${step.principle}` : ''}
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        {adv && (
+          <div style={{ marginBottom: 20 }}>
+            <h3 style={H3}>调养建议</h3>
+            {adv.zhifa && <div style={{ ...BODY, marginBottom: 8 }}>治法：{adv.zhifa}</div>}
+            {adv.food?.recommended?.length ? (
+              <div style={BODY}>推荐食材：{adv.food.recommended.join('、')}</div>
+            ) : null}
+            {adv.food?.recipes?.map((rec, i) => (
+              <div key={i} style={BODY}>
+                {rec.name}：{rec.detail}
+              </div>
+            ))}
+            {adv.food?.avoid && <div style={BODY}>忌口：{adv.food.avoid}</div>}
+            {adv.lifestyle?.length ? (
+              <div style={{ marginTop: 8 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: '#7b8c76' }}>生活调摄</div>
+                {adv.lifestyle.map((l, i) => (
+                  <div key={i} style={BODY}>· {l}</div>
+                ))}
+              </div>
+            ) : null}
+            {adv.acupoints?.length ? (
+              <div style={{ marginTop: 8 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: '#7b8c76' }}>穴位保健</div>
+                {adv.acupoints.map((p, i) => (
+                  <div key={i} style={BODY}>
+                    {p.name}
+                    {p.location ? `（${p.location}）` : ''}
+                    {p.method ? `：${p.method}` : ''}
+                    {p.effect ? ` — ${p.effect}` : ''}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            {adv.exercise && <div style={{ ...BODY, marginTop: 8 }}>养生功法：{adv.exercise}</div>}
+            {adv.warning && (
+              <div style={{ ...BODY, marginTop: 8, color: '#c2473d' }}>注意：{adv.warning}</div>
+            )}
+          </div>
+        )}
+
+        <p style={{ fontSize: 12, color: 'rgba(107,93,79,0.7)', lineHeight: 1.6, marginTop: 24 }}>
+          本报告由 AI 中医助手生成，仅供健康参考。如有不适，请及时到正规医疗机构就诊。涉及用药建议时，请在执业中医师指导下使用。
+        </p>
+      </div>
     </div>
   );
 }

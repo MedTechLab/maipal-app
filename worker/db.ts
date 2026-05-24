@@ -193,6 +193,7 @@ interface ReportRow {
   face_analysis: string | null;
   voice_analysis: string | null;
   suggestions: string;
+  report_json: string | null;
   created_at: number;
 }
 
@@ -203,6 +204,7 @@ const rowToReport = (r: ReportRow): HealthReport => ({
   face_analysis: r.face_analysis,
   voice_analysis: r.voice_analysis,
   suggestions: parseJsonArray(r.suggestions),
+  report_json: r.report_json,
   created_at: r.created_at,
 });
 
@@ -219,14 +221,21 @@ export async function latestReport(db: DB, userId: string): Promise<HealthReport
 export async function insertReport(
   db: DB,
   userId: string,
-  body: { date: string; face_analysis: string; voice_analysis: string; suggestions: string[] },
+  body: {
+    date: string;
+    face_analysis: string;
+    voice_analysis: string;
+    suggestions: string[];
+    report_json?: string;
+  },
 ): Promise<HealthReport> {
   const id = crypto.randomUUID();
   const created_at = now();
+  const report_json = body.report_json ?? null;
   await db
     .prepare(
-      `INSERT INTO health_reports (id, user_id, date, face_analysis, voice_analysis, suggestions, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO health_reports (id, user_id, date, face_analysis, voice_analysis, suggestions, report_json, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
       id,
@@ -235,6 +244,7 @@ export async function insertReport(
       body.face_analysis,
       body.voice_analysis,
       JSON.stringify(body.suggestions),
+      report_json,
       created_at,
     )
     .run();
@@ -245,6 +255,7 @@ export async function insertReport(
     face_analysis: body.face_analysis,
     voice_analysis: body.voice_analysis,
     suggestions: body.suggestions,
+    report_json,
     created_at,
   };
 }
@@ -307,9 +318,20 @@ const DEFAULT_TASKS: { text: string }[] = [
   { text: '晚上10:30：准备睡眠' },
 ];
 
-export async function createPlan(db: DB, userId: string): Promise<Plan> {
+export async function createPlan(
+  db: DB,
+  userId: string,
+  tasks?: { text: string }[],
+): Promise<Plan> {
   const planId = crypto.randomUUID();
   const created_at = now();
+
+  // Use report-derived tasks when supplied (clamped); otherwise the default set.
+  const cleaned = (tasks ?? [])
+    .map((t) => ({ text: String(t.text ?? '').trim() }))
+    .filter((t) => t.text.length > 0)
+    .slice(0, 8);
+  const planTasks = cleaned.length > 0 ? cleaned : DEFAULT_TASKS;
 
   // Deactivate prior plans, then insert the new one + tasks in a batch.
   const stmts: D1PreparedStatement[] = [
@@ -320,7 +342,7 @@ export async function createPlan(db: DB, userId: string): Promise<Plan> {
       )
       .bind(planId, userId, created_at),
   ];
-  DEFAULT_TASKS.forEach((t, i) => {
+  planTasks.forEach((t, i) => {
     stmts.push(
       db
         .prepare(

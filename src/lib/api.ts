@@ -12,6 +12,7 @@ import type {
   AuthLoginResponse,
   ChatMessage,
   Clinic,
+  DiagnosisResult,
   HealthReport,
   Plan,
   PostMessageBody,
@@ -21,7 +22,18 @@ import type {
   User,
 } from '../../worker/types';
 
-export type { AuthLoginResponse, ChatMessage, Clinic, HealthReport, Plan, Product, User };
+export type {
+  AuthLoginResponse,
+  ChatMessage,
+  Clinic,
+  DiagnosisResult,
+  HealthReport,
+  Plan,
+  Product,
+  User,
+};
+
+export type ChatTurn = { role: 'user' | 'assistant'; content: string };
 
 const BASE: string = (import.meta.env.VITE_API_BASE as string | undefined) ?? '';
 const TOKEN_KEY = 'maipal.session';
@@ -88,6 +100,75 @@ async function req<T>(
   return body as T;
 }
 
+// ─── Streaming chat (SSE) ────────────────────────────────────
+// Bypasses req<T> because the response is an event stream, not JSON. Calls
+// onDelta for each token; resolves on `data: [DONE]`.
+
+async function chatStream(
+  messages: ChatTurn[],
+  onDelta: (text: string) => void,
+  opts: { model?: string; signal?: AbortSignal } = {},
+): Promise<void> {
+  const token = await loadSessionToken();
+  const res = await fetch(`${BASE}/api/me/chat`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ messages, model: opts.model }),
+    signal: opts.signal,
+  });
+  if (!res.ok || !res.body) {
+    const text = await res.text().catch(() => '');
+    throw new ApiError(res.status, text || null, 'chat stream failed');
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith('data:')) continue;
+      const data = trimmed.slice(5).trim();
+      if (data === '[DONE]') return;
+      try {
+        const parsed = JSON.parse(data) as { content?: string; error?: string };
+        if (parsed.error) throw new Error(parsed.error);
+        if (parsed.content) onDelta(parsed.content);
+      } catch {
+        // partial/non-JSON line — ignore
+      }
+    }
+  }
+}
+
+// ─── TTS ─────────────────────────────────────────────────────
+
+async function ttsBlob(text: string): Promise<Blob | null> {
+  try {
+    const token = await loadSessionToken();
+    const res = await fetch(`${BASE}/api/me/tts`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ text }),
+    });
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    return blob.size > 200 ? blob : null;
+  } catch {
+    return null;
+  }
+}
+
 // ─── Public API ──────────────────────────────────────────────
 
 export const api = {
@@ -118,10 +199,22 @@ export const api = {
   updateProfile: (body: UpdateUserProfileBody) =>
     req<User>('/api/me/profile', { method: 'POST', json: body }),
 
+  // Opening line (public)
+  getOpening: () => req<{ opening: string }>('/api/opening', { auth: false }),
+
   // Chat
   listMessages: () => req<ChatMessage[]>('/api/me/messages'),
   postMessage: (body: PostMessageBody) =>
     req<ChatMessage>('/api/me/messages', { method: 'POST', json: body }),
+  chatStream,
+
+  // 望诊 / 闻诊
+  diagnose: (kind: 'face' | 'tongue' | 'voice', payload: { image?: string; transcript?: string }) =>
+    req<DiagnosisResult>(`/api/me/diagnosis/${kind}`, { method: 'POST', json: payload }),
+
+  // TTS — returns an MP3 blob, or null when synthesis is unavailable (client
+  // then falls back to browser speechSynthesis).
+  tts: ttsBlob,
 
   // Reports
   latestReport: () => req<HealthReport | null>('/api/me/reports/latest'),
@@ -130,7 +223,11 @@ export const api = {
 
   // Plan + tasks
   getPlan: () => req<Plan | null>('/api/me/plan'),
-  createPlan: () => req<Plan>('/api/me/plan', { method: 'POST' }),
+  createPlan: (tasks?: { text: string }[]) =>
+    req<Plan>('/api/me/plan', {
+      method: 'POST',
+      json: tasks ? { tasks } : {},
+    }),
   completeTask: (taskId: string) =>
     req<{ id: string; completed: boolean }>(`/api/tasks/${taskId}/complete`, {
       method: 'PATCH',

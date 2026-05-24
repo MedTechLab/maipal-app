@@ -38,7 +38,58 @@ export interface HealthReport {
   face_analysis: string | null;
   voice_analysis: string | null;
   suggestions: string[];
+  // Serialized `DoctorReport` (the rich GENERATE_REPORT payload), if present.
+  report_json?: string | null;
   created_at: number;
+}
+
+// ─── Rich doctor report (the GENERATE_REPORT `report` object) ──
+// Every field is optional: the model fills only what this consultation gathered.
+
+export interface ReportItem {
+  key: string;
+  value: string;
+  tag?: string;
+}
+
+export interface SizhenSection {
+  status: string;
+  items: ReportItem[];
+}
+
+export interface DoctorReport {
+  patientName?: string;
+  age?: string;
+  bodyType?: string;
+  chiefComplaint?: string;
+  doctorNote?: string;
+  sizhen?: {
+    face?: SizhenSection;
+    tongue?: SizhenSection;
+    voice?: SizhenSection;
+    inquiry?: SizhenSection;
+  };
+  analysis?: {
+    bagang?: string;
+    organs?: string;
+    nature?: string;
+    zhengxing?: string[];
+    tizhi?: string;
+    tizhiNote?: string;
+  };
+  reasoning?: { observation: string; principle: string }[];
+  advice?: {
+    zhifa?: string;
+    food?: {
+      recommended?: string[];
+      recipes?: { name: string; detail: string }[];
+      avoid?: string;
+    };
+    lifestyle?: string[];
+    acupoints?: { name: string; location?: string; method?: string; effect?: string }[];
+    exercise?: string;
+    warning?: string;
+  };
 }
 
 export interface Task {
@@ -110,6 +161,31 @@ export interface PostReportBody {
   face_analysis: string;
   voice_analysis: string;
   suggestions: string[];
+  report_json?: string;
+}
+
+export interface ChatRequestBody {
+  messages: { role: 'system' | 'user' | 'assistant'; content: string }[];
+  model?: string;
+}
+
+export interface TtsRequestBody {
+  text: string;
+}
+
+export interface DiagnosisRequestBody {
+  image?: string;
+  transcript?: string;
+}
+
+export interface DiagnosisResult {
+  structured: Record<string, unknown> | null;
+  // Plain-text block re-injected into the chat (matches the persona 信号回传 format).
+  summary: string;
+}
+
+export interface CreatePlanBody {
+  tasks?: { text: string }[];
 }
 
 export interface AddPointsBody {

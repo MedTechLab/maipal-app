@@ -1,6 +1,7 @@
 import { Hono, type Context, type MiddlewareHandler } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
+import { streamSSE } from 'hono/streaming';
 import * as db from './db';
 import { signSession, verifySession } from './auth/jwt';
 import {
@@ -12,21 +13,20 @@ import {
 import type {
   AddPointsBody,
   AuthLoginBody,
+  ChatRequestBody,
+  CreatePlanBody,
+  DiagnosisRequestBody,
   PostMessageBody,
   PostReportBody,
+  TtsRequestBody,
   UpdateUserProfileBody,
   User,
 } from './types';
-
-interface Env {
-  DB: D1Database;
-  ASSETS: Fetcher;
-  SESSION_SECRET: string;
-  GOOGLE_CLIENT_ID?: string;
-  APPLE_CLIENT_ID?: string;
-  MICROSOFT_CLIENT_ID?: string;
-  MICROSOFT_TENANT?: string;
-}
+import type { Env } from './env';
+import { buildSystemPrompt, extractOpeningMessage } from './persona-prompt';
+import { callCodeBuddy, type LlmMessage } from './llm';
+import { synthesizeSpeech } from './tts';
+import { runDiagnosis } from './diagnosis';
 
 type Vars = { userId: string; user: User };
 type AppEnv = { Bindings: Env; Variables: Vars };
@@ -60,6 +60,9 @@ app.use(
 );
 
 app.get('/api/health', (c) => c.json({ ok: true, ts: Date.now() }));
+
+// Doctor's opening line (public — shown before sign-in / on a fresh session).
+app.get('/api/opening', (c) => c.json({ opening: extractOpeningMessage() }));
 
 // ─── Auth: provider sign-in ──────────────────────────────────
 
@@ -156,6 +159,103 @@ app.post('/api/me/messages', async (c) => {
   return c.json(m, 201);
 });
 
+// ─── AI chat (streaming) ─────────────────────────────────────
+// Prepends the persona system prompt and pipes CodeBuddy's SSE through, re-emitting
+// the v5 wire format: `data: {"content":"…"}` … `data: [DONE]`. We don't persist
+// here — the client writes each turn via POST /api/me/messages.
+
+app.post('/api/me/chat', async (c) => {
+  const body = await c.req.json<ChatRequestBody>().catch(() => null);
+  if (!body?.messages?.length) {
+    return c.json({ error: 'messages required' }, 400);
+  }
+  const messages: LlmMessage[] = [
+    { role: 'system', content: buildSystemPrompt() },
+    ...body.messages,
+  ];
+
+  let upstream: Response;
+  try {
+    upstream = await callCodeBuddy(c.env, messages, { stream: true, model: body.model });
+  } catch (e) {
+    return c.json({ error: 'chat upstream unreachable', detail: (e as Error).message }, 502);
+  }
+  if (!upstream.ok || !upstream.body) {
+    const detail = upstream.body ? (await upstream.text()).slice(0, 300) : '';
+    return c.json({ error: 'chat upstream error', status: upstream.status, detail }, 502);
+  }
+
+  return streamSSE(c, async (stream) => {
+    const reader = upstream.body!.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith('data:')) continue;
+          const data = trimmed.slice(5).trim();
+          if (data === '[DONE]') continue; // we emit our own terminator below
+          try {
+            const parsed = JSON.parse(data) as {
+              choices?: { delta?: { content?: string } }[];
+            };
+            const content = parsed.choices?.[0]?.delta?.content;
+            if (content) await stream.writeSSE({ data: JSON.stringify({ content }) });
+          } catch {
+            // partial JSON or keepalive — ignore
+          }
+        }
+      }
+    } catch (e) {
+      await stream.writeSSE({ data: JSON.stringify({ error: (e as Error).message }) });
+    } finally {
+      await stream.writeSSE({ data: '[DONE]' });
+    }
+  });
+});
+
+// ─── TTS (edge-tts → MP3) ────────────────────────────────────
+// On any failure returns 5xx so the client falls back to browser speechSynthesis.
+
+app.post('/api/me/tts', async (c) => {
+  const body = await c.req.json<TtsRequestBody>().catch(() => null);
+  if (!body?.text?.trim()) return c.json({ error: 'text required' }, 400);
+  try {
+    const audio = await synthesizeSpeech(c.env, body.text);
+    return new Response(audio, {
+      status: 200,
+      headers: { 'Content-Type': 'audio/mpeg', 'Cache-Control': 'no-cache' },
+    });
+  } catch (e) {
+    return c.json({ error: 'tts unavailable', detail: (e as Error).message }, 502);
+  }
+});
+
+// ─── 望诊 / 闻诊 (LLM vision + transcript) ───────────────────
+// Returns { structured, summary }; `summary` is the text block the client
+// re-injects as a user message so the doctor can read it back.
+
+app.post('/api/me/diagnosis/:kind', async (c) => {
+  const kind = c.req.param('kind');
+  if (kind !== 'face' && kind !== 'tongue' && kind !== 'voice') {
+    return c.json({ error: 'unknown diagnosis kind' }, 400);
+  }
+  const body = await c.req
+    .json<DiagnosisRequestBody>()
+    .catch(() => ({}) as DiagnosisRequestBody);
+  const result = await runDiagnosis(c.env, kind, {
+    image: body.image,
+    transcript: body.transcript,
+  });
+  return c.json(result);
+});
+
 // ─── Reports ─────────────────────────────────────────────────
 
 app.get('/api/me/reports/latest', async (c) => {
@@ -179,7 +279,8 @@ app.get('/api/me/plan', async (c) => {
 });
 
 app.post('/api/me/plan', async (c) => {
-  const p = await db.createPlan(c.env.DB, c.get('userId'));
+  const body = await c.req.json<CreatePlanBody>().catch(() => ({}) as CreatePlanBody);
+  const p = await db.createPlan(c.env.DB, c.get('userId'), body.tasks);
   return c.json(p, 201);
 });
 

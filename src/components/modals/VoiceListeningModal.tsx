@@ -5,17 +5,29 @@ type State = 'ready' | 'recording' | 'done';
 type Props = {
   open: boolean;
   state: State;
+  guidance: string;
   onStart: () => void;
+  onStop: () => void;
   onSkip: () => void;
   time: number;
 };
 
-export function VoiceListeningModal({ open, state, onStart, onSkip, time }: Props) {
+export function VoiceListeningModal({
+  open,
+  state,
+  guidance,
+  onStart,
+  onStop,
+  onSkip,
+  time,
+}: Props) {
   if (!open) return null;
   const label =
-    state === 'ready' ? '点击开始' : state === 'recording' ? '正在听…' : '好了，我们继续';
+    state === 'ready' ? '点击开始朗读' : state === 'recording' ? '正在听…（再次点击结束）' : '好了，我们继续';
   const mm = String(Math.floor(time / 60)).padStart(2, '0');
   const ss = String(time % 60).padStart(2, '0');
+  const sentence = guidance.replace(/^请朗读[:：]?\s*/, '').replace(/^['"“”]|['"“”]$/g, '').trim();
+  const onMic = state === 'ready' ? onStart : state === 'recording' ? onStop : undefined;
 
   return (
     <>
@@ -76,9 +88,7 @@ export function VoiceListeningModal({ open, state, onStart, onSkip, time }: Prop
                 lineHeight: 1.55,
               }}
             >
-              今天天气很好，
-              <br />
-              我现在感觉还可以。
+              {sentence || '今天来看看我这身体情况'}
             </p>
           </div>
           <p
@@ -113,8 +123,8 @@ export function VoiceListeningModal({ open, state, onStart, onSkip, time }: Prop
                 />
               )}
               <button
-                onClick={state === 'ready' ? onStart : undefined}
-                disabled={state !== 'ready'}
+                onClick={onMic}
+                disabled={state === 'done'}
                 className={state === 'recording' ? 'anim-breath' : ''}
                 style={{
                   width: 76,
@@ -127,7 +137,7 @@ export function VoiceListeningModal({ open, state, onStart, onSkip, time }: Prop
                   justifyContent: 'center',
                   boxShadow: '0 6px 12px rgba(107,93,79,0.2)',
                   position: 'relative',
-                  cursor: state === 'ready' ? 'pointer' : 'default',
+                  cursor: state === 'done' ? 'default' : 'pointer',
                 }}
               >
                 <Mic size={32} color="#fff" />
