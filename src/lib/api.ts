@@ -120,8 +120,24 @@ async function req<T>(
     body: json !== undefined ? JSON.stringify(json) : (init.body as BodyInit | undefined),
   });
   const text = await res.text();
-  const body = text ? JSON.parse(text) : null;
-  if (!res.ok) throw new ApiError(res.status, body);
+  let body: unknown = null;
+  if (text) {
+    try {
+      body = JSON.parse(text);
+    } catch {
+      // Non-JSON body (e.g. a plain-text 5xx) — keep the raw text.
+      body = text;
+    }
+  }
+  if (!res.ok) {
+    let msg: string | undefined;
+    if (typeof body === 'string') msg = body;
+    else if (body && typeof body === 'object') {
+      const b = body as { error?: string; detail?: string };
+      msg = [b.error, b.detail].filter(Boolean).join(': ') || undefined;
+    }
+    throw new ApiError(res.status, body, msg);
+  }
   return body as T;
 }
 

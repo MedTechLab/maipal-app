@@ -61,6 +61,16 @@ app.use(
 
 app.get('/api/health', (c) => c.json({ ok: true, ts: Date.now() }));
 
+// Never leak a plain-text "Internal Server Error" — the client expects JSON and
+// would otherwise throw an opaque JSON-parse error. Surface the real message.
+app.onError((err, c) => {
+  console.error('[unhandled]', err);
+  return c.json(
+    { error: 'server error', detail: err instanceof Error ? err.message : String(err) },
+    500,
+  );
+});
+
 // Doctor's opening line (public — shown before sign-in / on a fresh session).
 app.get('/api/opening', (c) => c.json({ opening: extractOpeningMessage() }));
 
@@ -75,37 +85,41 @@ async function handleProviderLogin(c: Context<AppEnv>, verified: VerifiedIdentit
 app.post('/api/auth/google', async (c) => {
   const body = await c.req.json<AuthLoginBody>().catch(() => null);
   if (!body?.idToken) return c.json({ error: 'idToken required' }, 400);
+  let id: VerifiedIdentity;
   try {
-    const id = await verifyGoogle(body.idToken, c.env);
-    return handleProviderLogin(c, id);
+    id = await verifyGoogle(body.idToken, c.env);
   } catch (e) {
     return c.json({ error: 'invalid token', detail: (e as Error).message }, 401);
   }
+  // Session creation (DB write + signing) errors are server faults → 500 via onError.
+  return await handleProviderLogin(c, id);
 });
 
 app.post('/api/auth/apple', async (c) => {
   const body = await c.req.json<AuthLoginBody>().catch(() => null);
   if (!body?.idToken) return c.json({ error: 'idToken required' }, 400);
+  let id: VerifiedIdentity;
   try {
-    const id = await verifyApple(body.idToken, c.env);
-    // Apple only sends name on first sign-in, and not in the JWT — the client
-    // forwards it in the request body.
-    if (!id.name && body.name) id.name = body.name;
-    return handleProviderLogin(c, id);
+    id = await verifyApple(body.idToken, c.env);
   } catch (e) {
     return c.json({ error: 'invalid token', detail: (e as Error).message }, 401);
   }
+  // Apple only sends name on first sign-in, and not in the JWT — the client
+  // forwards it in the request body.
+  if (!id.name && body.name) id.name = body.name;
+  return await handleProviderLogin(c, id);
 });
 
 app.post('/api/auth/microsoft', async (c) => {
   const body = await c.req.json<AuthLoginBody>().catch(() => null);
   if (!body?.idToken) return c.json({ error: 'idToken required' }, 400);
+  let id: VerifiedIdentity;
   try {
-    const id = await verifyMicrosoft(body.idToken, c.env);
-    return handleProviderLogin(c, id);
+    id = await verifyMicrosoft(body.idToken, c.env);
   } catch (e) {
     return c.json({ error: 'invalid token', detail: (e as Error).message }, 401);
   }
+  return await handleProviderLogin(c, id);
 });
 
 // ─── Auth middleware ─────────────────────────────────────────
