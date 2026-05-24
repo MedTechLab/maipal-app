@@ -21,7 +21,8 @@ greeting font `ChillHuoKai` (寒蝉活楷).
 | Icons | lucide-react |
 | Animation | CSS keyframes + `motion` (entry/breath/pulse) |
 | Dev integration | `@cloudflare/vite-plugin` (Miniflare runs the worker alongside Vite) |
-| Plugins wired | `@capacitor/status-bar`, `splash-screen`, `camera`, `keyboard`, `haptics`, `preferences`, `app` |
+| Plugins wired | `@capacitor/status-bar`, `splash-screen`, `camera`, `keyboard`, `haptics`, `preferences`, `app`, `@capgo/capacitor-social-login` |
+| Auth | OAuth (Google / Apple / Microsoft) → HS256 session JWT |
 
 ## Running the web layer
 
@@ -174,6 +175,60 @@ wrangler.toml                 Worker name, D1 binding, static-assets binding
 
 public/                       fonts (ChillHuoKai .otf) + product/clinic/background PNGs
 ```
+
+## Authentication
+
+Users sign in with one of three OAuth providers — Google, Apple, or Microsoft.
+The Capacitor client uses `@capgo/capacitor-social-login` (native SDKs on
+iOS/Android, ASWebAuthenticationSession-style flow on web), receives an ID
+token from the provider, and forwards it to the Worker, which verifies the
+signature against the provider's JWKS and returns an HS256 session JWT
+(stored client-side via `@capacitor/preferences`).
+
+The session token is sent as `Authorization: Bearer …` on every protected
+API call. There is **no anonymous / device-ID tier** — onboarding routes
+through `/login` before `/userinfo`.
+
+### Client env vars (baked at build time)
+
+| Var | Notes |
+|---|---|
+| `VITE_GOOGLE_WEB_CLIENT_ID` | Web/Android client ID from Google Cloud Console. |
+| `VITE_GOOGLE_IOS_CLIENT_ID` | iOS client ID (optional; needed for native iOS). |
+| `VITE_APPLE_CLIENT_ID` | Service ID from Apple Developer (e.g. `com.medtechlab.maipal.web`). |
+| `VITE_APPLE_REDIRECT_URL` | Apple's `return_to` URL — only used on web. |
+| `VITE_MICROSOFT_CLIENT_ID` | Application (client) ID from Azure AD app registration. |
+| `VITE_MICROSOFT_TENANT` | Defaults to `common`. Use a tenant GUID for single-tenant apps. |
+| `VITE_MICROSOFT_REDIRECT_URL` | OAuth2 redirect — `myapp://oauth/microsoft` on native, your `https://…` on web. |
+
+### Worker secrets
+
+```bash
+npx wrangler secret put SESSION_SECRET        # 32+ random bytes — signs the session JWT
+npx wrangler secret put GOOGLE_CLIENT_ID      # Google audience(s), comma-separated
+npx wrangler secret put APPLE_CLIENT_ID       # Apple audience(s), comma-separated
+npx wrangler secret put MICROSOFT_CLIENT_ID   # Azure AD audience
+# Optional:
+npx wrangler secret put MICROSOFT_TENANT      # defaults to "common"
+```
+
+`GOOGLE_CLIENT_ID` can be a comma-separated list — list every audience the
+client may send (e.g. iOS, Android-via-web, web).
+
+### Provider setup checklist
+
+- **Google** — Google Cloud Console → APIs & Services → Credentials. Create
+  OAuth client IDs for each platform you ship (iOS, Android, Web). For
+  Android use the SHA-1 of the signing cert; for iOS add the bundle id
+  `com.medtechlab.maipal` and add the reverse-client-id URL scheme to
+  `ios/App/App/Info.plist`.
+- **Apple** — Apple Developer → Identifiers. Enable "Sign in with Apple" on
+  the App ID, then create a Services ID for the web flow. Add the
+  "Sign in with Apple" capability in Xcode.
+- **Microsoft** — Azure Portal → App registrations → New registration.
+  Add a "Mobile and desktop applications" platform with redirect URI
+  `myapp://oauth/microsoft` (or a custom scheme matching
+  `VITE_MICROSOFT_REDIRECT_URL`). Request scopes `openid email profile`.
 
 ## Brand guardrails (do not break)
 
