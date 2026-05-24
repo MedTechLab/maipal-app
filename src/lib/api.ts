@@ -51,26 +51,51 @@ class ApiError extends Error {
 
 let cachedToken: string | null = null;
 
-async function preferences() {
+async function nativeGetSessionToken() {
   const { Preferences } = await import('@capacitor/preferences');
-  return Preferences;
+  return Preferences.get({ key: TOKEN_KEY });
+}
+
+async function nativeSetSessionToken(token: string) {
+  const { Preferences } = await import('@capacitor/preferences');
+  return Preferences.set({ key: TOKEN_KEY, value: token });
+}
+
+async function nativeRemoveSessionToken() {
+  const { Preferences } = await import('@capacitor/preferences');
+  return Preferences.remove({ key: TOKEN_KEY });
 }
 
 export async function loadSessionToken(): Promise<string | null> {
   if (cachedToken !== null) return cachedToken;
-  const Preferences = await preferences();
-  const { value } = await Preferences.get({ key: TOKEN_KEY });
+
+  if (typeof window !== 'undefined') {
+    const webToken = localStorage.getItem(TOKEN_KEY);
+    cachedToken = webToken ?? null;
+    return cachedToken;
+  }
+
+  const { value } = await nativeGetSessionToken();
   cachedToken = value ?? null;
   return cachedToken;
 }
 
 export async function setSessionToken(token: string | null): Promise<void> {
   cachedToken = token;
-  const Preferences = await preferences();
+
+  if (typeof window !== 'undefined') {
+    if (token) {
+      localStorage.setItem(TOKEN_KEY, token);
+    } else {
+      localStorage.removeItem(TOKEN_KEY);
+    }
+    return;
+  }
+
   if (token) {
-    await Preferences.set({ key: TOKEN_KEY, value: token });
+    await nativeSetSessionToken(token);
   } else {
-    await Preferences.remove({ key: TOKEN_KEY });
+    await nativeRemoveSessionToken();
   }
 }
 
