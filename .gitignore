@@ -27,6 +27,9 @@ dist-ssr
 # TS
 *.tsbuildinfo
 
+# Playwright CLI artifacts
+.playwright-cli/
+
 # Wrangler / Cloudflare
 .wrangler/
 .dev.vars
