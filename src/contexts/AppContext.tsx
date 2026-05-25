@@ -102,7 +102,7 @@ type AppContextValue = {
 
   // Called by ModalHost once a capture / recording is collected
   submitFaceResult: (imageDataUrl: string) => void;
-  submitVoiceResult: (transcript: string) => void;
+  submitVoiceResult: (transcript: string, voiceMetrics?: unknown) => void;
   onPermissionResult: (type: 'camera' | 'mic', granted: boolean) => void;
   cancelFace: () => void;
   cancelVoice: () => void;
@@ -445,16 +445,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  const submitVoiceResult = useCallback(async (transcript: string) => {
+  const submitVoiceResult = useCallback(async (transcript: string, voiceMetrics?: unknown) => {
     const t = transcript.trim();
-    if (!t) {
+    if (!t && !voiceMetrics) {
       openVoiceModal(null);
       submitUserTurnRef.current('[闻诊·失败]');
       return;
     }
     openVoiceModal('done');
     try {
-      const { summary } = await api.diagnose('voice', { transcript: t });
+      const { summary } = await api.diagnose('voice', { transcript: t, voiceMetrics });
       setTimeout(() => {
         openVoiceModal(null);
         submitUserTurnRef.current(summary);

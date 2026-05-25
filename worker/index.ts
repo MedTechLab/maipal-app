@@ -271,6 +271,7 @@ app.post('/api/me/diagnosis/:kind', async (c) => {
   const result = await runDiagnosis(c.env, kind, {
     image: body.image,
     transcript: body.transcript,
+    voiceMetrics: body.voiceMetrics,
   });
   return c.json(result);
 });

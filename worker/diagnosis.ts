@@ -1,5 +1,5 @@
 import type { Env } from './env';
-import type { DiagnosisResult } from './types';
+import type { DiagnosisResult, VoiceMetricsPayload } from './types';
 import { callCodeBuddyText, type LlmMessage } from './llm';
 
 export type DiagnosisKind = 'face' | 'tongue' | 'voice';
@@ -33,15 +33,32 @@ const TONGUE_PROMPT = `你是中医舌诊视觉分析助手。请观察这张舌
 }
 若照片不清晰或非舌头，所有值填 "无法判断"。`;
 
-const VOICE_PROMPT = `你是中医闻诊辅助助手。下面是患者朗读一句话的「语音转写文本」。
-你只能依据文本推断语速与流畅度，无法听到真实声学特征（音量/音调/嘶哑/声颤），这些请标记为"未测"。
+const VOICE_PROMPT = `你是中医闻诊辅助分析助手。下面是患者朗读一句话时的**真实声学分析数据**和语音转写文本。
+请根据这些声学指标进行中医闻诊判断。
+
+声学指标说明：
+- intensity_db: 平均音量(dB)，50以下=极微，50-60=低微，60-70=正常，70+=洪亮
+- f0_mean_hz: 基频均值(Hz)，男性100-160正常，女性170-260正常；低于下限=低沉，高于上限=高亢
+- f0_sd_hz: 基频标准差(Hz)，>15Hz提示声颤
+- voiced_ratio: 有声比率(0-1)，>0.75=语速偏快，<0.45=语速偏慢
+- pause_count: 停顿次数(>=200ms)，归一化到5秒内>=2次=换气偏多
+- spectral_tilt: 频谱倾斜度，>0.6=正常清晰，0.3-0.6=轻度沙哑，<0.3=明显嘶哑
+- jitter_approx: 基频扰动(%)，>1.0%=轻度嘶哑，>1.5%=声颤明显
+
 只输出一个 JSON 对象，不要任何多余文字：
 {
-  "语速": "偏慢/正常/偏快/未测",
-  "流畅度": "流畅/可/断续/未测",
-  "辨证初判": "简短判断，或 '需结合其他四诊'"
+  "音量": "洪亮/正常/低微/极微",
+  "音调": "高亢/正常/低沉",
+  "嘶哑": "无/轻度/中度/重度",
+  "声颤": "无/有",
+  "语速": "偏快/正常/偏慢",
+  "流畅度": "流畅/断续/费力",
+  "换气频率": "正常/偏多",
+  "辨证初判": "如 气虚/肺系失调/声音平和 等"
 }
-转写文本：`;
+
+声学数据：
+`;
 
 // The model may wrap JSON in prose or ```json fences — pull out the first object.
 function parseJsonLoose(text: string): Record<string, unknown> | null {
@@ -84,8 +101,8 @@ function formatTongue(o: Record<string, unknown>): string {
 function formatVoice(o: Record<string, unknown>): string {
   return (
     `[闻诊·语声结果]\n` +
-    `音量：未测；音调：未测；嘶哑：未测；声颤：未测\n` +
-    `语速：${v(o, '语速', '未测')}；流畅度：${v(o, '流畅度', '未测')}\n` +
+    `音量：${v(o, '音量')}；音调：${v(o, '音调')}；嘶哑：${v(o, '嘶哑')}；声颤：${v(o, '声颤')}\n` +
+    `语速：${v(o, '语速')}；流畅度：${v(o, '流畅度')}；换气：${v(o, '换气频率')}\n` +
     `辨证初判：${v(o, '辨证初判', '—')}`
   );
 }
@@ -118,7 +135,7 @@ async function analyzeImage(
 export async function runDiagnosis(
   env: Env,
   kind: DiagnosisKind,
-  payload: { image?: string; transcript?: string },
+  payload: { image?: string; transcript?: string; voiceMetrics?: VoiceMetricsPayload },
 ): Promise<DiagnosisResult> {
   const failSummary = kind === 'voice' ? '[闻诊·失败]' : '[望诊·失败]';
   try {
@@ -133,12 +150,33 @@ export async function runDiagnosis(
       return { structured: o, summary: kind === 'face' ? formatFace(o) : formatTongue(o) };
     }
 
-    // voice — derive from the speech-to-text transcript only.
+    // voice — use real audio metrics + transcript for comprehensive analysis
     const transcript = (payload.transcript ?? '').trim();
-    if (!transcript) return { structured: null, summary: failSummary };
+    const metrics = payload.voiceMetrics;
+    if (!transcript && !metrics) return { structured: null, summary: failSummary };
+
+    // Build the prompt with real acoustic data
+    let metricsStr = '';
+    if (metrics) {
+      metricsStr = JSON.stringify({
+        duration_sec: metrics.duration_sec,
+        intensity_db: metrics.intensity_db,
+        f0_mean_hz: metrics.f0_mean_hz,
+        f0_sd_hz: metrics.f0_sd_hz,
+        voiced_ratio: metrics.voiced_ratio,
+        pause_count: metrics.pause_count,
+        spectral_tilt: metrics.spectral_tilt,
+        jitter_approx: metrics.jitter_approx,
+      }, null, 2);
+    } else {
+      metricsStr = '(无声学数据 — 仅有转写文本)';
+    }
+
+    const promptContent = VOICE_PROMPT + metricsStr + '\n\n转写文本：' + (transcript || '(无转写)');
+
     const text = await callCodeBuddyText(
       env,
-      [{ role: 'user', content: VOICE_PROMPT + transcript }],
+      [{ role: 'user', content: promptContent }],
       { responseFormat: 'json_object' },
     );
     const o = parseJsonLoose(text);

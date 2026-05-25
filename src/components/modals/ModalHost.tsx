@@ -5,17 +5,19 @@ import { FaceObservationModal } from './FaceObservationModal';
 import { VoiceListeningModal } from './VoiceListeningModal';
 import { requestCameraPermission } from '../../lib/capture';
 import { startRecognition, type SttController } from '../../lib/stt';
+import { VoiceRecorder, type VoiceMetrics } from '../../lib/voice-analysis';
 
 const MAX_REC_SECONDS = 20;
 
 /**
  * Bridges the presentational modals to real device APIs + the AppContext signal
- * flow: camera permission → photo capture → 望诊; mic permission → speech-to-text → 闻诊.
+ * flow: camera permission → photo capture → 望诊; mic permission → speech-to-text + audio analysis → 闻诊.
  */
 export function ModalHost() {
   const app = useApp();
   const recTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const sttRef = useRef<SttController | null>(null);
+  const recorderRef = useRef<VoiceRecorder | null>(null);
   const transcriptRef = useRef('');
   const submittedRef = useRef(false);
 
@@ -26,23 +28,34 @@ export function ModalHost() {
     }
   };
 
-  const stopVoiceCapture = () => {
+  const stopVoiceCapture = async (): Promise<VoiceMetrics | null> => {
     clearTimer();
     sttRef.current?.stop();
     sttRef.current = null;
+    // Stop audio recorder and get metrics
+    try {
+      const metrics = await recorderRef.current?.stop();
+      recorderRef.current = null;
+      return metrics ?? null;
+    } catch {
+      recorderRef.current?.cancel();
+      recorderRef.current = null;
+      return null;
+    }
   };
 
-  const finishVoice = () => {
+  const finishVoice = async () => {
     if (submittedRef.current) return;
     submittedRef.current = true;
-    stopVoiceCapture();
-    app.submitVoiceResult(transcriptRef.current);
+    const metrics = await stopVoiceCapture();
+    app.submitVoiceResult(transcriptRef.current, metrics ?? undefined);
   };
 
   useEffect(
     () => () => {
       clearTimer();
       sttRef.current?.stop();
+      recorderRef.current?.cancel();
     },
     [],
   );
@@ -65,8 +78,8 @@ export function ModalHost() {
     app.onPermissionResult('mic', granted);
   };
 
-  // ─── Voice recording ──────────────────────────────────────
-  const onVoiceStart = () => {
+  // ─── Voice recording (STT + audio analysis in parallel) ───
+  const onVoiceStart = async () => {
     submittedRef.current = false;
     transcriptRef.current = '';
     app.openVoiceModal('recording');
@@ -77,6 +90,18 @@ export function ModalHost() {
       app.setRecTime(t);
       if (t >= MAX_REC_SECONDS) finishVoice();
     }, 1000);
+
+    // Start audio recorder for real acoustic analysis
+    const recorder = new VoiceRecorder();
+    try {
+      await recorder.start();
+      recorderRef.current = recorder;
+    } catch {
+      // If audio recording fails, continue with STT only
+      recorderRef.current = null;
+    }
+
+    // Start STT in parallel
     sttRef.current = startRecognition({
       onPartial: (text) => {
         transcriptRef.current = text;

@@ -23,6 +23,15 @@ export function SplashScreen() {
     return () => clearTimeout(t);
   }, [nav, authLoading, isAuthenticated, user]);
 
+  // Safety net: if authLoading never resolves (e.g. plugin init hangs), force
+  // navigate to login after 4s so the user is never stuck on the splash.
+  useEffect(() => {
+    const safety = setTimeout(() => {
+      nav('/login', { replace: true });
+    }, 4000);
+    return () => clearTimeout(safety);
+  }, [nav]);
+
   return (
     <div
       className="mp-screen"

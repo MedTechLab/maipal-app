@@ -251,7 +251,7 @@ export const api = {
   chatStream,
 
   // 望诊 / 闻诊
-  diagnose: (kind: 'face' | 'tongue' | 'voice', payload: { image?: string; transcript?: string }) =>
+  diagnose: (kind: 'face' | 'tongue' | 'voice', payload: { image?: string; transcript?: string; voiceMetrics?: unknown }) =>
     req<DiagnosisResult>(`/api/me/diagnosis/${kind}`, { method: 'POST', json: payload }),
 
   // TTS — returns an MP3 blob, or null when synthesis is unavailable (client

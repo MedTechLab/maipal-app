@@ -3,7 +3,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 const config: CapacitorConfig = {
   appId: 'com.medtechlab.maipal',
   appName: 'MaiPal 脉伴',
-  webDir: 'dist',
+  webDir: 'dist/client',
   bundledWebRuntime: false,
   ios: {
     contentInset: 'always',

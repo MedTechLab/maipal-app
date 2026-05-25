@@ -173,9 +173,22 @@ export interface TtsRequestBody {
   text: string;
 }
 
+export interface VoiceMetricsPayload {
+  duration_sec: number;
+  intensity_db: number;
+  f0_mean_hz: number;
+  f0_sd_hz: number;
+  voiced_ratio: number;
+  pause_count: number;
+  spectral_tilt: number;
+  jitter_approx: number;
+}
+
 export interface DiagnosisRequestBody {
   image?: string;
   transcript?: string;
+  /** Real audio metrics from frontend Web Audio API analysis */
+  voiceMetrics?: VoiceMetricsPayload;
 }
 
 export interface DiagnosisResult {
