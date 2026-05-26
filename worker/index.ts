@@ -122,6 +122,19 @@ app.post('/api/auth/microsoft', async (c) => {
   return await handleProviderLogin(c, id);
 });
 
+// ─── Dev login (simulator/development only) ─────────────────
+app.post('/api/auth/dev-login', async (c) => {
+  const body = await c.req.json<{ email?: string }>().catch(() => null);
+  const email = body?.email || 'dev@maipal.local';
+  const verified: VerifiedIdentity = {
+    provider: 'google',
+    subject: `dev_${email.replace(/[^a-z0-9]/gi, '_')}`,
+    email,
+    name: 'Dev User',
+  };
+  return await handleProviderLogin(c, verified);
+});
+
 // ─── Auth middleware ─────────────────────────────────────────
 
 const requireAuth: MiddlewareHandler<AppEnv> = async (c, next) => {

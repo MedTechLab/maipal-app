@@ -234,6 +234,12 @@ export const api = {
       json: { idToken },
       auth: false,
     }),
+  devLogin: (email?: string) =>
+    req<AuthLoginResponse>('/api/auth/dev-login', {
+      method: 'POST',
+      json: { email: email || 'dev@maipal.local' },
+      auth: false,
+    }),
   me: () => req<User>('/api/auth/me'),
 
   // Profile

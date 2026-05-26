@@ -58,6 +58,7 @@ type AppContextValue = {
   isAuthenticated: boolean;
   authLoading: boolean;
   signInWith: (provider: AuthProvider) => Promise<User>;
+  devSignIn: () => Promise<User>;
   signOut: () => Promise<void>;
   saveProfile: (p: ProfileDraft) => Promise<User>;
 
@@ -586,6 +587,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [hydrateUserData],
   );
 
+  const devSignIn = useCallback(async (): Promise<User> => {
+    const resp = await api.devLogin();
+    await setSessionToken(resp.token);
+    setUser(resp.user);
+    setPoints(resp.user.points);
+    hydrateUserData().catch(swallow);
+    return resp.user;
+  }, [hydrateUserData]);
+
   const signOut = useCallback(async () => {
     stopSpeaking();
     if (user?.auth_provider) {
@@ -645,6 +655,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       isAuthenticated: !!user,
       authLoading,
       signInWith,
+      devSignIn,
       signOut,
       saveProfile,
       cameraPerm,
@@ -685,6 +696,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       user,
       authLoading,
       signInWith,
+      devSignIn,
       signOut,
       saveProfile,
       cameraPerm,

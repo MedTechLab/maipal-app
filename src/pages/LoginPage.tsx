@@ -4,7 +4,7 @@ import { ShanShuiBackground } from '../components/ShanShuiBackground';
 import { useApp } from '../contexts/AppContext';
 import type { AuthProvider } from '../lib/social-login';
 
-type ButtonState = { loading: AuthProvider | null; error: string | null };
+type ButtonState = { loading: AuthProvider | 'dev' | null; error: string | null };
 
 const PROVIDERS: { id: AuthProvider; label: string; bg: string; fg: string; icon: string }[] = [
   { id: 'apple', label: '使用 Apple 登录', bg: '#000', fg: '#fff', icon: '' },
@@ -25,6 +25,29 @@ export function LoginPage() {
       nav(user.name ? '/app/chat' : '/userinfo', { replace: true });
     } catch (e) {
       const msg = e instanceof Error ? e.message : '登录失败，请重试';
+      setState({ loading: null, error: msg });
+    }
+  };
+
+  const devSignIn = async () => {
+    setState({ loading: 'dev', error: null });
+    try {
+      // Dev mode: bypass native OAuth SDK, use direct API call
+      const resp = await fetch('https://api.maipal.org/api/auth/dev-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'dev@maipal.local' }),
+      });
+      if (!resp.ok) {
+        throw new Error(`Server: ${resp.status}`);
+      }
+      const data = await resp.json() as { token: string; user: { name?: string } };
+      // Manually set the session
+      localStorage.setItem('maipal.session', data.token);
+      // Reload to pick up the session
+      window.location.href = data.user.name ? '/app/chat' : '/userinfo';
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : '开发登录失败';
       setState({ loading: null, error: msg });
     }
   };
@@ -119,6 +142,31 @@ export function LoginPage() {
               {state.error}
             </p>
           )}
+
+          <button
+            onClick={devSignIn}
+            disabled={state.loading !== null}
+            style={{
+              width: '100%',
+              height: 44,
+              borderRadius: 12,
+              background: '#7b8c76',
+              color: '#fff',
+              border: 'none',
+              fontSize: 14,
+              fontWeight: 500,
+              fontFamily: 'var(--font-sans)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              cursor: state.loading ? 'default' : 'pointer',
+              opacity: state.loading && state.loading !== 'dev' ? 0.5 : 1,
+              marginTop: 8,
+            }}
+          >
+            <span>{state.loading === 'dev' ? '登录中…' : '🧪 开发模式快速登录'}</span>
+          </button>
 
           <p
             style={{
