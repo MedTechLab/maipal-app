@@ -150,6 +150,11 @@ async function chatStream(
   onDelta: (text: string) => void,
   opts: { model?: string; signal?: AbortSignal } = {},
 ): Promise<void> {
+  // Dev-bypass mode: call CodeBuddy API directly (same as v5 server.js)
+  if (localStorage.getItem('maipal.dev-bypass') === 'true') {
+    return devChatStream(messages, onDelta, opts);
+  }
+
   const token = await loadSessionToken();
   const res = await fetch(`${BASE}/api/me/chat`, {
     method: 'POST',
@@ -184,6 +189,65 @@ async function chatStream(
         if (parsed.content) onDelta(parsed.content);
       } catch {
         // partial/non-JSON line — ignore
+      }
+    }
+  }
+}
+
+// Dev-bypass: direct LLM call (same API as v5 server.js)
+const DEV_SYSTEM_PROMPT = `你是脉大夫，一位资深、亲切的中医师。
+角色特征：温和亲切，像真正的中医面诊一样和患者对话。目标人群是45-65岁中老年人，以养生调理为主。
+对话方式：一次只问一个问题，不要一次性抛出大量问题，像真人面对面对话。
+问诊流程：遵循望闻问切四诊合参，按中医十问歌系统问诊。
+核心原则：先问称呼建立信任，问诊一次只问一个问题，养生为主治未病理念。
+语言风格：使用"呀"作为句末语气词，温暖不刻板，不使用"您好"开头。`;
+
+async function devChatStream(
+  messages: ChatTurn[],
+  onDelta: (text: string) => void,
+  opts: { signal?: AbortSignal } = {},
+): Promise<void> {
+  const apiKey = 'ck_fi5qn7671o8w.S0XOPduaPm1QzIEWjGgUEEqTMyBGqcH6lKWYwNcSmrI';
+  const body = {
+    model: 'claude-sonnet-4-20250514',
+    stream: true,
+    messages: [
+      { role: 'system', content: DEV_SYSTEM_PROMPT },
+      ...messages.map(m => ({ role: m.role, content: m.content })),
+    ],
+  };
+  const res = await fetch('https://copilot.tencent.com/v2/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify(body),
+    signal: opts.signal,
+  });
+  if (!res.ok || !res.body) {
+    throw new Error(`LLM API error: ${res.status}`);
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith('data:')) continue;
+      const data = trimmed.slice(5).trim();
+      if (data === '[DONE]') return;
+      try {
+        const parsed = JSON.parse(data);
+        const content = parsed?.choices?.[0]?.delta?.content;
+        if (content) onDelta(content);
+      } catch {
+        // ignore
       }
     }
   }
@@ -238,6 +302,30 @@ export const api = {
     req<AuthLoginResponse>('/api/auth/dev-login', {
       method: 'POST',
       json: { email: email || 'dev@maipal.local' },
+      auth: false,
+    }),
+  phoneSendCode: (phone: string) =>
+    req<{ ok: boolean; message: string }>('/api/auth/phone/send-code', {
+      method: 'POST',
+      json: { phone },
+      auth: false,
+    }),
+  phoneVerify: (phone: string, code: string) =>
+    req<AuthLoginResponse>('/api/auth/phone/verify', {
+      method: 'POST',
+      json: { phone, code },
+      auth: false,
+    }),
+  phoneRegister: (phone: string, password: string) =>
+    req<AuthLoginResponse>('/api/auth/phone/register', {
+      method: 'POST',
+      json: { phone, password },
+      auth: false,
+    }),
+  phoneLogin: (phone: string, password: string) =>
+    req<AuthLoginResponse>('/api/auth/phone/login', {
+      method: 'POST',
+      json: { phone, password },
       auth: false,
     }),
   me: () => req<User>('/api/auth/me'),

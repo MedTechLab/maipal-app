@@ -12,12 +12,16 @@ type ProductWithLink = Product & { buy_url?: string };
 
 // Fallback data used if the API isn't reachable yet
 const FALLBACK_PRODUCTS: ProductWithLink[] = [
-  { id: 't1', name: '枸杞红枣茶', description: '补血补气，安神养心', price_hkd: 68, source: 'HKTVmall', category: 'tea', image_url: '/assets/product-chicken-soup.png', buy_url: 'https://www.hktvmall.com/s/%E6%9E%B8%E6%9D%9E%E7%BA%A2%E6%9E%A3%E8%8C%B6' },
-  { id: 't2', name: '菊花决明子茶', description: '清肝热，护眼明目', price_hkd: 58, source: 'HKTVmall', category: 'tea', image_url: '/assets/product-mushroom.png', buy_url: 'https://www.hktvmall.com/s/%E8%8F%8A%E8%8A%B1%E5%86%B3%E6%98%8E%E5%AD%90%E8%8C%B6' },
-  { id: 's1', name: '虫草党参益气鸡汤', description: '益气健脾，提升免疫力', price_hkd: 188, source: '余仁生', category: 'soup', image_url: '/assets/product-chicken-soup.png', buy_url: 'https://www.euyansang.com.hk/' },
-  { id: 's2', name: '花胶响螺元贝猪腱汤', description: '滋阴养颜，补气养血', price_hkd: 268, source: '余仁生', category: 'soup', image_url: '/assets/product-soup-pork.png', buy_url: 'https://www.euyansang.com.hk/' },
-  { id: 's4', name: '药膳菌菇汤包', description: '鲜美菌菇，温中补脾', price_hkd: 88, source: 'HKTVmall', category: 'soup', image_url: '/assets/product-mushroom.png', buy_url: 'https://www.hktvmall.com/s/%E8%8D%AF%E8%86%B3%E8%8F%8C%E8%8F%87%E6%B1%A4%E5%8C%85' },
-  { id: 'p3', name: '极品阿胶', description: '滋阴补血，润燥养颜', price_hkd: 980, source: 'HKTVmall', category: 'paste', image_url: '/assets/product-ejiao.png', buy_url: 'https://www.hktvmall.com/s/%E9%98%BF%E8%83%B6' },
+  { id: 't1', name: '枸杞红枣茶', description: '补血补气，安神养心', price_hkd: 68, source: 'HKTVmall', category: 'tea', image_url: 'https://images.unsplash.com/photo-1597481499666-130f8eb2c9cd?w=400&q=80', buy_url: 'https://www.hktvmall.com/hktv/zh/main/PickyShop/s/H0956012/%E8%B6%85%E7%B4%9A%E5%B7%BF%E5%A0%B4/%E8%B6%85%E7%B4%9A%E5%B8%82%E5%A0%B4/%E9%A3%B2%E5%93%81-%E5%8D%B3%E6%B2%96%E9%A3%B2%E5%93%81/%E8%8C%B6%E5%8C%85-%E8%8C%B6%E8%91%89/%E4%B8%AD%E5%9C%8B%E8%8C%B6-%E8%8C%B6%E5%8C%85-%E8%8C%B6%E8%91%89/%E8%AD%99%E9%9F%BB%E5%A0%82-%E6%A1%82%E5%9C%93%E6%9E%B8%E6%9D%9E%E7%B4%85%E6%A3%97%E8%8C%B6100g%E5%90%AB10%E5%B0%8F%E5%8C%85-%E8%A3%9C%E8%A1%80%E8%A3%9C%E6%B0%A3-%E5%AE%89%E7%A5%9E%E9%A4%8A%E5%BF%83-%E6%BA%AB%E4%B8%AD%E8%A3%9C%E8%84%BE-%E7%BE%8E%E5%AE%B9%E9%A4%8A%E9%A1%8F-%E6%8E%92%E6%AF%92%E8%8C%B6-%E5%A7%A8%E5%AA%BD-%E7%B6%93%E6%9C%9F%E7%97%9B%E5%BF%85%E5%82%99%E9%A3%B2%E5%93%81-/p/H0956012_S_T02-000231' },
+  { id: 't2', name: '菊花决明子茶', description: '清肝热，护眼明目，熬夜必备', price_hkd: 58, source: 'HKTVmall', category: 'tea', image_url: 'https://images.unsplash.com/photo-1609016617751-e80552ae6ec2?w=400&q=80', buy_url: 'https://www.hktvmall.com/hktv/zh/main/PickyShop/s/H0956012/%E8%B6%85%E7%B4%9A%E5%B7%BF%E5%A0%B4/%E8%B6%85%E7%B4%9A%E5%B8%82%E5%A0%B4/%E9%A3%B2%E5%93%81-%E5%8D%B3%E6%B2%96%E9%A3%B2%E5%93%81/%E8%8C%B6%E5%8C%85-%E8%8C%B6%E8%91%89/%E4%B8%AD%E5%9C%8B%E8%8C%B6-%E8%8C%B6%E5%8C%85-%E8%8C%B6%E8%91%89/5g50%E5%8C%85%E8%8F%8A%E8%8A%B1%E6%B1%BA%E6%98%8E%E5%AD%90%E8%8C%B6-%E6%B8%85%E8%82%9D%E7%86%B1-%E8%AD%B7%E7%9C%BC%E6%98%8E%E7%9B%AE-%E9%A4%8A%E8%82%9D-%E6%8E%92%E6%AF%92%E9%A4%8A%E7%94%9F%E6%9E%9C%E8%8C%B6-%E8%8C%B6%E5%8C%85-%E7%86%AC%E5%A4%9C%E5%BF%85%E5%82%99-%E9%A4%8A%E8%82%9D%E8%AD%B7%E8%82%9D%E5%8E%BB%E6%B0%B4%E8%85%AB%E5%8E%BB%E6%BF%95%E8%8C%B6-%E8%8C%B6%E9%A1%9E%E9%A3%B2%E5%93%81-%E5%A4%A7%E5%AE%B9%E9%87%8F/p/H0956012_S_T05-000468' },
+  { id: 't3', name: '玫瑰花茶', description: '疏肝理气，美容养颜', price_hkd: 45, source: '位元堂', category: 'tea', image_url: 'https://images.unsplash.com/photo-1680431217569-dff801acc0bf?w=400&q=80', buy_url: 'https://www.wyteshop.com/SalePage/Index/515702' },
+  { id: 't4', name: '陈皮普洱茶', description: '健脾化湿，消食解腻', price_hkd: 78, source: '余仁生', category: 'tea', image_url: 'https://images.unsplash.com/photo-1765809411613-9870f2f2d459?w=400&q=80', buy_url: 'https://shop.euyansang.com.hk/SalePage/Index/340936' },
+  { id: 's1', name: '虫草党参益气鸡汤', description: '益气健脾，提升免疫力', price_hkd: 188, source: '余仁生', category: 'soup', image_url: '/assets/product-chicken-soup.png', buy_url: 'https://shop.euyansang.com.hk/SalePage/Index/434083' },
+  { id: 's2', name: '花胶响螺元贝猪腱汤', description: '滋阴养颜，补气养血', price_hkd: 268, source: '余仁生', category: 'soup', image_url: '/assets/product-soup-pork.png', buy_url: 'https://shop.euyansang.com.hk/SalePage/Index/2842' },
+  { id: 's3', name: '石斛花旗参滋阴汤', description: '滋阴降火，清热生津', price_hkd: 158, source: '位元堂', category: 'soup', image_url: '/assets/product-mushroom.png', buy_url: 'https://www.wyteshop.com/SalePage/Index/518417' },
+  { id: 's4', name: '药膳菌菇汤包', description: '鲜美菌菇，温中补脾', price_hkd: 88, source: 'HKTVmall', category: 'soup', image_url: '/assets/product-mushroom.png', buy_url: 'https://www.hktvmall.com/hktv/zh/main/EXQUISGOODS/s/B0243001/%E8%B6%85%E7%B4%9A%E5%B7%BF%E5%A0%B4/%E8%B6%85%E7%B4%9A%E5%B8%82%E5%A0%B4/%E6%B9%AF-%E7%86%9F%E9%A3%9F-%E9%86%83%E8%A3%BD%E9%A3%9F%E5%93%81/%E4%B8%AD%E5%BC%8F%E6%B9%AF/%E6%B9%AF%E9%AE%AE%E5%91%B3%E7%BE%8E%E8%8C%8C%E8%8F%87%E6%B9%AF%E5%8C%85-%E8%8D%AF%E8%86%B3%E8%8F%8C%E6%B1%A4%E5%8C%85/p/B0243001_S_6924906840420' },
+  { id: 'p1', name: '灵芝龟苓膏', description: '清热解毒，滋阴润燥', price_hkd: 128, source: '位元堂', category: 'paste', image_url: '/assets/product-ejiao.png', buy_url: 'https://www.wyteshop.com/SalePage/Index/515689' },
+  { id: 'p2', name: '海底椰秋梨膏', description: '润肺止咳，清热化痰', price_hkd: 98, source: '位元堂', category: 'paste', image_url: '/assets/product-ejiao.png', buy_url: 'https://www.wyteshop.com/SalePage/Index/518730' },
 ];
 
 const FALLBACK_CLINICS: ClinicDetail[] = [
@@ -68,7 +72,14 @@ export function StorePage() {
 
   const handleBuy = (product: ProductWithLink) => {
     if (product.buy_url) {
-      window.open(product.buy_url, '_blank', 'noopener');
+      // Use location assign for Capacitor WebView compatibility
+      const a = document.createElement('a');
+      a.href = product.buy_url;
+      a.target = '_blank';
+      a.rel = 'noopener';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
     }
     setCartCount((c) => c + 1);
   };

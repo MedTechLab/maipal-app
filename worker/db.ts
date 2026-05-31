@@ -99,6 +99,68 @@ export async function upsertAuthUser(
   return (await getUserById(db, id))!;
 }
 
+// ─── Phone + Password Auth ───────────────────────────────────
+
+export async function getUserByPhone(db: DB, phone: string): Promise<User | null> {
+  const row = await db
+    .prepare('SELECT * FROM users WHERE phone = ?')
+    .bind(phone)
+    .first<UserRow & { phone: string }>();
+  return row ? rowToUser(row) : null;
+}
+
+export async function createPhoneUser(db: DB, phone: string, password: string): Promise<User> {
+  const id = crypto.randomUUID();
+  const ts = now();
+  // Store password as simple hash (for production, use bcrypt/argon2)
+  const passwordHash = await hashPassword(password);
+  await db
+    .prepare(
+      `INSERT INTO users (id, auth_provider, auth_subject, phone, password_hash, concerns, points, created_at, updated_at)
+       VALUES (?, 'phone', ?, ?, ?, '[]', 0, ?, ?)`,
+    )
+    .bind(id, `phone_${phone}`, phone, passwordHash, ts, ts)
+    .run();
+  return (await getUserById(db, id))!;
+}
+
+export async function verifyPhoneLogin(db: DB, phone: string, password: string): Promise<User | null> {
+  const row = await db
+    .prepare('SELECT * FROM users WHERE phone = ?')
+    .bind(phone)
+    .first<UserRow & { phone: string; password_hash: string | null }>();
+  if (!row || !row.password_hash) return null;
+  const valid = await verifyPassword(password, row.password_hash);
+  if (!valid) return null;
+  // Update last login time
+  const ts = now();
+  await db.prepare('UPDATE users SET updated_at = ? WHERE id = ?').bind(ts, row.id).run();
+  return rowToUser(row);
+}
+
+// ─── Admin ───────────────────────────────────────────────────
+
+export async function listAllUsers(db: DB): Promise<User[]> {
+  const rows = await db
+    .prepare('SELECT * FROM users ORDER BY created_at DESC')
+    .all<UserRow>();
+  return rows.results.map(rowToUser);
+}
+
+// ─── Password hashing (simple SHA-256 for now) ───────────────
+
+async function hashPassword(password: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(password + '_maipal_salt_2026');
+  const hash = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function verifyPassword(password: string, hash: string): Promise<boolean> {
+  const computed = await hashPassword(password);
+  return computed === hash;
+}
+
 /** Fill in the profile fields from /userinfo. */
 export async function updateUserProfile(
   db: DB,

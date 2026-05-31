@@ -178,8 +178,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [avatarState, setAvatarState] = useState<AvatarState>('standby');
   const [speakingId, setSpeakingId] = useState<string | null>(null);
   const [healthReport, setHealthReportState] = useState<HealthReport | null>(null);
-  const [hasPlan, setHasPlan] = useState(false);
-  const [tasks, setTasks] = useState<Task[]>([]);
+  const [hasPlan, setHasPlan] = useState(true);
+  const [tasks, setTasks] = useState<Task[]>([
+    { id: 'd1', text: '早 7:30 · 晨起温水 + 枸杞红枣茶', completed: false },
+    { id: 'd2', text: '上午 9:00 · 八段锦「调理脾胃须单举」×8次', completed: false },
+    { id: 'd3', text: '午间 12:30 · 闭目静养 20 分钟', completed: false },
+    { id: 'd4', text: '下午 17:00 · 散步 30 分钟', completed: false },
+    { id: 'd5', text: '晚 21:00 · 按揉足三里+三阴交各 3 分钟', completed: false },
+  ]);
   const [points, setPoints] = useState(0);
 
   const [permModal, openPermModal] = useState<AppContextValue['permModal']>(null);
@@ -546,6 +552,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      // Dev bypass: skip real auth, use a mock user
+      if (localStorage.getItem('maipal.dev-bypass') === 'true') {
+        if (!cancelled) {
+          setUser({
+            id: 'dev-user-001',
+            auth_provider: 'google',
+            email: 'dev@maipal.local',
+            name: 'Dev User',
+            gender: null,
+            age: null,
+            height: undefined,
+            weight: undefined,
+            concerns: [],
+            points: 100,
+            created_at: Date.now(),
+            updated_at: Date.now(),
+          });
+          setAuthLoading(false);
+        }
+        return;
+      }
+
       const token = await loadSessionToken().catch(() => null);
       if (!token) {
         if (!cancelled) setAuthLoading(false);
@@ -598,9 +626,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     stopSpeaking();
-    if (user?.auth_provider) {
+    if (user?.auth_provider && user.auth_provider !== 'phone') {
       await oauthLogout(user.auth_provider).catch(() => undefined);
     }
+    localStorage.removeItem('maipal.dev-bypass');
     await setSessionToken(null);
     setUser(null);
     setMessages([{ id: 'opening', role: 'assistant', content: FALLBACK_OPENING }]);

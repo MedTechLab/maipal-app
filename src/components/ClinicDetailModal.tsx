@@ -39,7 +39,14 @@ export function ClinicDetailModal({ open, clinic, onClose }: Props) {
   if (!visible || !clinic) return null;
 
   const openExternal = (url?: string) => {
-    if (url) window.open(url, '_blank', 'noopener');
+    if (!url) return;
+    const a = document.createElement('a');
+    a.href = url;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   };
 
   return (

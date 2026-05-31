@@ -135,6 +135,41 @@ app.post('/api/auth/dev-login', async (c) => {
   return await handleProviderLogin(c, verified);
 });
 
+// ─── Phone + password registration/login ─────────────────────
+app.post('/api/auth/phone/register', async (c) => {
+  const body = await c.req.json<{ phone?: string; password?: string }>().catch(() => null);
+  if (!body?.phone || !body?.password) return c.json({ error: 'phone and password required' }, 400);
+  const phone = body.phone.replace(/\s+/g, '');
+  if (!/^\+?\d{8,15}$/.test(phone)) return c.json({ error: 'invalid phone number' }, 400);
+  if (body.password.length < 4) return c.json({ error: 'password too short (min 4)' }, 400);
+
+  // Check if phone already registered
+  const existing = await db.getUserByPhone(c.env.DB, phone);
+  if (existing) return c.json({ error: 'phone already registered, please login' }, 409);
+
+  const user = await db.createPhoneUser(c.env.DB, phone, body.password);
+  const token = await signSession(user.id, c.env.SESSION_SECRET);
+  return c.json({ token, user }, 201);
+});
+
+app.post('/api/auth/phone/login', async (c) => {
+  const body = await c.req.json<{ phone?: string; password?: string }>().catch(() => null);
+  if (!body?.phone || !body?.password) return c.json({ error: 'phone and password required' }, 400);
+  const phone = body.phone.replace(/\s+/g, '');
+
+  const user = await db.verifyPhoneLogin(c.env.DB, phone, body.password);
+  if (!user) return c.json({ error: 'invalid phone or password' }, 401);
+
+  const token = await signSession(user.id, c.env.SESSION_SECRET);
+  return c.json({ token, user }, 200);
+});
+
+// ─── Admin: list all users (for backend inspection) ──────────
+app.get('/api/admin/users', async (c) => {
+  const users = await db.listAllUsers(c.env.DB);
+  return c.json({ count: users.length, users });
+});
+
 // ─── Auth middleware ─────────────────────────────────────────
 
 const requireAuth: MiddlewareHandler<AppEnv> = async (c, next) => {

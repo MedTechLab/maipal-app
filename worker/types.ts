@@ -2,7 +2,7 @@
 // The client imports from `@shared/types` (see vite alias).
 
 export type Gender = 'male' | 'female';
-export type AuthProvider = 'google' | 'apple' | 'microsoft';
+export type AuthProvider = 'google' | 'apple' | 'microsoft' | 'phone';
 
 export interface User {
   id: string;

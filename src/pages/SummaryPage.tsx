@@ -32,22 +32,21 @@ const TASK_EXTRAS: Record<string, TaskExtraData> = {
       { title: '养生茶饮搭配指南', source: '中医药在线', url: 'https://tcm.org', icon: '📚' },
     ],
   },
-  '午休30分钟': {
-    music: { title: '午间冥想引导', url: '/assets/meditation.mp3', duration: 600 },
-  },
-  '散步30分钟': {
+  '八段锦': {
     links: [
-      { title: '正确散步姿势与呼吸法', source: '健康时报', url: 'https://health.com', icon: '🚶' },
+      { title: '央视·八段锦第三式教学', source: 'CCTV生活圈', url: 'https://tv.cctv.com/2024/05/01/VIDECLmtBXu8BkReYR6VUSNs240501.shtml', icon: '🏋️' },
     ],
   },
-  '足浴泡脚20分钟': {
-    links: [
-      { title: '中药足浴配方推荐', source: '本草纲目', url: 'https://tcm.org', icon: '🦶' },
-    ],
-    music: { title: '舒缓古筝 · 泡脚伴听', url: '/assets/guzheng.mp3', duration: 1200 },
+  '闭目静养': {
+    music: { title: '冥想轻音乐 · 20分钟', url: 'https://cdn.pixabay.com/audio/2024/11/01/audio_4956b4eff1.mp3', duration: 1200 },
   },
-  '准备睡眠': {
-    music: { title: '助眠白噪音 · 雨声', url: '/assets/rain.mp3', duration: 1800 },
+  '散步': {
+    music: { title: '自然漫步轻音乐 · 30分钟', url: 'https://cdn.pixabay.com/audio/2025/03/06/audio_28c035e1a4.mp3', duration: 1800 },
+  },
+  '足三里': {
+    links: [
+      { title: '足三里+三阴交按摩图文教学', source: '微信公众号', url: 'https://mp.weixin.qq.com/s/xVJ44C7DJyJM-7gFF-BJEw', icon: '🦶' },
+    ],
   },
 };
 
@@ -294,6 +293,45 @@ export function SummaryPage() {
               >
                 查看完整报告
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* Default plan prompt */}
+        {isToday && hasPlan && !healthReport && (
+          <div style={{ padding: '0 24px', marginBottom: 16 }}>
+            <div
+              className="mp-card"
+              style={{
+                padding: 20,
+                border: '1.5px solid rgba(123,140,118,0.25)',
+                background: 'linear-gradient(135deg, rgba(123,140,118,0.04), rgba(215,200,176,0.06))',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+                <div
+                  style={{
+                    width: 44,
+                    height: 44,
+                    borderRadius: 12,
+                    background: 'linear-gradient(135deg, #7b8c76, #a8b0a5)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                  }}
+                >
+                  <span style={{ fontSize: 20 }}>📋</span>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <h3 style={{ margin: '0 0 6px', fontSize: 16, fontWeight: 600, color: '#2a2a2a' }}>
+                    通用养生计划
+                  </h3>
+                  <p style={{ margin: '0 0 12px', fontSize: 13, color: '#6b5d4f', lineHeight: 1.6 }}>
+                    当前为中医基础养生方案，适合日常保健。完成问诊后，脉医生将为您定制专属调理计划。
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
         )}
